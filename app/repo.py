@@ -53,6 +53,18 @@ def rule(conn, key: str) -> int:
     return RULES[key] if value is None else value
 
 
+def offline_cache(conn) -> bool:
+    """¿Puede el móvil guardar copias de las pantallas para verlas sin conexión?
+
+    Sin PIN, sí (no hay nada que proteger más allá de la propia red). Con PIN,
+    solo si se activa a propósito: esas copias se ven sin pedir el PIN.
+    """
+    elegido = setting(conn, "offline_cache")
+    if elegido is not None:
+        return elegido == "1"
+    return not setting(conn, "pin_hash")
+
+
 def salary(conn) -> int | None:
     return int_setting(conn, "salary")
 
@@ -164,13 +176,20 @@ def get_tx(conn, tx_id: int) -> sqlite3.Row | None:
 
 
 TX_FIELDS = ("date", "type", "category_id", "envelope_id", "account_id", "concept", "amount")
+TX_INSERT_FIELDS = TX_FIELDS + ("client_uid",)
 
 
 def insert_tx(conn, **fields) -> int:
     cur = conn.execute(
-        f"INSERT INTO transactions ({', '.join(TX_FIELDS)}) VALUES ({', '.join('?' * len(TX_FIELDS))})",
-        [fields[f] for f in TX_FIELDS])
+        f"INSERT INTO transactions ({', '.join(TX_INSERT_FIELDS)}) "
+        f"VALUES ({', '.join('?' * len(TX_INSERT_FIELDS))})",
+        [fields.get(f) for f in TX_INSERT_FIELDS])
     return cur.lastrowid
+
+
+def tx_by_uid(conn, uid: str):
+    """El movimiento que ya se guardó con ese identificador, si existe."""
+    return conn.execute(TX_SELECT + " WHERE t.client_uid = ?", (uid,)).fetchone()
 
 
 def update_tx(conn, tx_id: int, **fields) -> None:

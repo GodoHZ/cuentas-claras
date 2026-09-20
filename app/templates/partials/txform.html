@@ -5,6 +5,7 @@
       {% if dialog %}hx-post="{{ action }}" hx-target="this" hx-swap="outerHTML"{% endif %}
       data-cuenta-general="{{ opts.default_account }}" data-cuenta-sobres="{{ opts.envelope_account }}">
   {% if dialog %}<input type="hidden" name="origen" value="dialogo">{% endif %}
+  <input type="hidden" name="uid" value="">
   {% if f.errors %}
   <div class="alert alert-error" role="alert">{% for e in f.errors %}<p>{{ e }}</p>{% endfor %}</div>
   {% endif %}

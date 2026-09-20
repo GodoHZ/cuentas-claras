@@ -229,14 +229,29 @@ select, input[type="date"], input[type="month"], input[type="text"], input[type=
 input[type="date"] { min-width: 0; }
 select { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: right 16px center, right 11px center; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 30px; }
 
-.day { color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .03em;
-       text-transform: uppercase; margin: 12px 0 -2px 4px; }
+.day {
+  color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .03em;
+  text-transform: uppercase; margin: 12px 0 -2px; padding: 4px 4px 6px;
+  position: sticky; top: -4px; z-index: 2;
+  background: linear-gradient(var(--page) 70%, transparent);
+}
 .card.list { padding: 0; overflow: hidden; }
 .tx {
   display: flex; align-items: center; gap: 10px; padding: 11px 14px;
   color: inherit; text-decoration: none; border-top: 1px solid var(--line);
 }
-.card.list .tx:first-child { border-top: 0; }
+.card.list .tx-wrap:first-child .tx { border-top: 0; }
+
+/* deslizar un movimiento hacia la izquierda para borrarlo, como en iOS */
+.tx-wrap { position: relative; overflow: hidden; }
+.tx { position: relative; z-index: 1; background: var(--surface); transition: transform .18s ease; will-change: transform; }
+.tx-wrap.abierto .tx { transform: translateX(-92px); }
+.tx-wrap.arrastrando .tx { transition: none; }
+.tx-borrar { position: absolute; inset: 0 0 0 auto; width: 92px; display: flex; }
+.tx-borrar button {
+  flex: 1; border: 0; background: var(--crit); color: #fff;
+  font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+}
 .tx:active { background: var(--surface-2); }
 .tx-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none;
           box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 10%, transparent); }
@@ -431,6 +446,44 @@ dialog.sheet::backdrop { background: rgba(0, 0, 0, .45); }
 }
 .sheet-head h2 { margin: 0; font-size: 16px; }
 dialog.sheet .txform { padding: 12px 14px calc(18px + var(--safe-bottom)); }
+
+/* sin conexión: aviso arriba y pendientes por enviar abajo */
+.sin-conexion {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 60;
+  padding: calc(6px + env(safe-area-inset-top, 0px)) 14px 6px;
+  background: var(--warn-bg); color: var(--ink);
+  font-size: 13px; font-weight: 600; text-align: center;
+  border-bottom: 1px solid var(--line);
+}
+
+#pendientes {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(80px + var(--safe-bottom)); z-index: 30;
+  display: flex; align-items: center; gap: 7px;
+  max-width: 92vw; padding: 9px 14px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--surface); color: var(--ink);
+  box-shadow: var(--sombra-alta); font: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer;
+}
+#pendientes[hidden] { display: none; }
+#pendientes .ico { color: var(--accent); }
+@media (min-width: 900px) { #pendientes { bottom: 24px; left: auto; right: 24px; transform: none; } }
+
+/* tirar hacia abajo para actualizar */
+#tirar {
+  position: fixed; left: 50%; top: calc(6px + env(safe-area-inset-top, 0px));
+  transform: translate(-50%, -60px); z-index: 50;
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--line); box-shadow: var(--sombra-alta);
+  font-size: 13px; font-weight: 600; color: var(--ink-2);
+  opacity: 0; pointer-events: none; transition: opacity .12s ease;
+}
+#tirar.visible { opacity: 1; }
+#tirar .ico { animation: girar 1s linear infinite; animation-play-state: paused; }
+#tirar.girando .ico { animation-play-state: running; }
+@keyframes girar { to { transform: rotate(360deg); } }
 
 #toast {
   position: fixed; left: 50%; bottom: calc(80px + var(--safe-bottom)); transform: translate(-50%, 20px);

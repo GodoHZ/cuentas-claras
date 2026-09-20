@@ -212,13 +212,15 @@ def create_app(db_path: Path | None = None, backup_dir: Path | None = None,
     @app.middleware("http")
     async def pin_guard(request: Request, call_next):
         path = request.url.path
+        pin_hash, copias_offline = None, True
         if not (path.startswith("/static/") or path in OPEN_PATHS):
             conn = db.connect(request.app.state.db_path)
             try:
                 pin_hash = repo.setting(conn, "pin_hash")
                 secret = repo.setting(conn, "secret_key", "")
+                copias_offline = repo.offline_cache(conn)
             except sqlite3.Error:
-                pin_hash = None
+                pin_hash, copias_offline = None, False
             finally:
                 conn.close()
             if pin_hash and not pin.valid_token(request.cookies.get(pin.COOKIE), secret, pin_hash):
@@ -230,6 +232,10 @@ def create_app(db_path: Path | None = None, backup_dir: Path | None = None,
         response = await call_next(request)
         if not path.startswith("/static/"):
             response.headers.setdefault("Cache-Control", "no-store")
+            if not copias_offline:
+                # el móvil no guardará copias de estas pantallas (ver Ajustes →
+                # Sin conexión): con PIN, esas copias se verían sin pedirlo
+                response.headers["X-Sin-Copia"] = "1"
         return response
 
     app.include_router(router)
@@ -303,6 +309,7 @@ def read_tx_form(conn, form) -> tuple[dict, dict | None]:
         errors.append("Ese sobre ya no existe.")
     if not account_id or not repo.get_row(conn, "accounts", account_id):
         errors.append("Elige la cuenta.")
+    uid = (form.get("uid") or "").strip()[:40] or None
     values = {"tipo": type_, "importe": form.get("importe") or "", "categoria_id": category_id,
               "sobre_id": envelope_id, "cuenta_id": account_id,
               "fecha": day.isoformat() if day else (form.get("fecha") or ""), "concepto": concept,
@@ -310,7 +317,7 @@ def read_tx_form(conn, form) -> tuple[dict, dict | None]:
     if errors:
         return values, None
     return values, dict(date=day.isoformat(), type=type_, category_id=category_id, envelope_id=envelope_id,
-                        account_id=account_id, concept=concept, amount=amount)
+                        account_id=account_id, concept=concept, amount=amount, client_uid=uid)
 
 
 @router.get("/nuevo")
@@ -323,6 +330,11 @@ async def create_tx(request: Request, conn=Depends(get_db)):
     form = await request.form()
     values, fields = read_tx_form(conn, form)
     in_dialog = form.get("origen") == "dialogo" and is_htmx(request)
+    # reenvío de algo apuntado sin conexión: si ya entró, no se duplica
+    repetido = repo.tx_by_uid(conn, fields["client_uid"]) if fields and fields.get("client_uid") else None
+    if repetido is not None:
+        log.info("Movimiento ya guardado (uid %s), no lo duplico", fields["client_uid"])
+        return Response(status_code=200, headers={"HX-Trigger": json.dumps({"txGuardado": "Ya estaba apuntado"})})
     if fields is None:
         opts = views.tx_form_options(conn)
         if in_dialog:
@@ -590,6 +602,7 @@ def settings_page(request: Request, abierto: str = "", conn=Depends(get_db)):
         "rules": {k: repo.rule(conn, k) for k in repo.RULES},
         "usados": views.used_ids(conn),
         "sweep": views.sweep_settings(conn),
+        "copias_offline": repo.offline_cache(conn),
         "backups": backups[:10], "backup_count": len(backups),
         "backup_error": request.app.state.backup_error,
         "backup_problem": backup.dir_problem(request.app.state.backup_dir), "keep_days": repo.rule(conn, "backup_keep_days"),
@@ -871,6 +884,15 @@ def loan_delete(request: Request, loan_id: int, conn=Depends(get_db)):
 
 
 # ---- PIN
+
+@router.post("/ajustes/sin-conexion")
+async def save_offline(request: Request, conn=Depends(get_db)):
+    form = await request.form()
+    with conn:
+        repo.set_setting(conn, "offline_cache", "1" if form.get("activo") else "0")
+    return redirect(request, settings_url("sinconexion"),
+                    "Guardado. Cierra la app y vuelve a abrirla para que el móvil se entere.")
+
 
 @router.post("/ajustes/pin")
 async def pin_set(request: Request, conn=Depends(get_db)):

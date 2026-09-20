@@ -30,6 +30,7 @@
 {% endmacro %}
 
 {% macro tx_row(r) %}
+<div class="tx-wrap">
 <a class="tx tx-{{ r.type }}" href="/movimientos/{{ r.id }}">
   <span class="tx-dot" aria-hidden="true"></span>
   <span class="tx-main">
@@ -47,6 +48,11 @@
     <small>{{ TYPES[r.type] }}</small>
   </span>
 </a>
+<form class="tx-borrar" method="post" action="/movimientos/{{ r.id }}/borrar"
+      hx-confirm="¿Borrar este movimiento ({{ TYPES[r.type]|lower }} de {{ r.amount|eur }})? No se puede deshacer.">
+  <button type="submit">Borrar</button>
+</form>
+</div>
 {% endmacro %}
 
 {% macro budget_bar(line, name) %}

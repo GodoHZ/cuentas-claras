@@ -316,6 +316,27 @@
   </div>
 </details>
 
+<details id="sinconexion" {% if open == 'sinconexion' %}open{% endif %}>
+  <summary>Sin conexión {% if copias_offline %}<span class="count">activado</span>{% endif %}</summary>
+  <div class="card">
+    <p class="hint">El móvil puede guardar una copia de las pantallas que visitas para poder abrirlas
+      aunque no haya red (fuera de casa sin Tailscale, o con el NAS apagado). Apuntar sin conexión
+      funciona siempre: eso se queda en el móvil y se envía solo al volver la red.</p>
+    <form method="post" action="/ajustes/sin-conexion" class="stack">
+      <label class="check"><input type="checkbox" name="activo" value="1" {% if copias_offline %}checked{% endif %}>
+        Guardar copias en el móvil para verlas sin conexión</label>
+      {% if pin_enabled %}
+      <div class="alert alert-warn">Tienes el PIN puesto: esas copias <strong>se pueden ver sin escribir el PIN</strong>,
+        porque sin red no hay quien lo compruebe. Como el iPhone ya se desbloquea con tu cara o tu código,
+        para la mayoría compensa; pero es tu decisión.</div>
+      {% endif %}
+      <button class="btn btn-primary" type="submit">Guardar</button>
+    </form>
+    <p class="hint">Después de cambiarlo, cierra la app del todo y vuelve a abrirla con conexión: el móvil
+      tarda una vuelta en enterarse.</p>
+  </div>
+</details>
+
 <details id="pin" {% if open == 'pin' %}open{% endif %}>
   <summary>PIN {% if pin_enabled %}<span class="count">activado</span>{% endif %}</summary>
   <div class="card">

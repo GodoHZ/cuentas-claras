@@ -1,0 +1,16 @@
+# Herramienta de desarrollo: arranca la app con datos de ejemplo y le hace
+# capturas con WebKit (el motor de Safari) a tamaño de iPhone.
+#   docker build -f scripts/capturas/Dockerfile --target export --output type=local,dest=/tmp/capturas .
+FROM mcr.microsoft.com/playwright/python:v1.63.0-noble AS shots
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --break-system-packages --no-cache-dir -r requirements.txt playwright==1.63.0
+COPY app ./app
+COPY scripts/capturas/demo.py scripts/capturas/gestos.py /w/
+RUN mkdir -p /demo /out && python /w/demo.py \
+    && (DATA_DIR=/demo BACKUP_DIR=/demo/backups APP_VERSION=capturas \
+        python -m uvicorn app.main:app --port 8000 &) \
+    && sleep 4 && python /w/gestos.py
+
+FROM scratch AS export
+COPY --from=shots /out /

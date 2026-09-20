@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="Finanzas">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
-<meta name="htmx-config" content='{"historyCacheSize": 0, "scrollIntoViewOnBoost": false}'>
+<meta name="htmx-config" content='{"historyCacheSize": 0, "scrollIntoViewOnBoost": false, "globalViewTransitions": true}'>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" type="image/png" href="/static/icons/icon-192.png">
 <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
@@ -69,6 +69,10 @@
   {% with opts=qa, f=qa_form, dialog=True, action="/movimientos/nuevo" %}{% include "partials/txform.html" %}{% endwith %}
 </dialog>
 {% endif %}
+<button id="pendientes" type="button" hidden>
+  {{ icono("copia") }} <span id="pendientes-texto"></span>
+</button>
+<div id="tirar" aria-hidden="true">{{ icono("copia") }} <span>Suelta para actualizar</span></div>
 <div id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>

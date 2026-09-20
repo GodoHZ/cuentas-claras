@@ -402,3 +402,59 @@ def test_ajustes_no_tiene_formularios_anidados(client):
     for etiqueta in re.findall(r"<form\b|</form>", html):
         profundidad += 1 if etiqueta == "<form" else -1
         assert profundidad in (0, 1), "hay un formulario dentro de otro en Ajustes"
+
+
+def test_reenviar_lo_apuntado_sin_conexion_no_duplica(client, db_path):
+    """El móvil reenvía lo que guardó sin red; el mismo uid no entra dos veces."""
+    conn = db.connect(db_path)
+    cats, envs, accs = ids(conn)
+    conn.close()
+    datos = {"origen": "dialogo", "uid": "abc-123", "tipo": "gasto", "importe": "12,34",
+             "categoria_id": cats["Ocio"], "sobre_id": "", "cuenta_id": accs["Cuenta corriente"],
+             "fecha": "2026-09-19", "concepto": "Cena"}
+
+    primera = client.post("/movimientos/nuevo", headers={"HX-Request": "true"}, data=datos)
+    segunda = client.post("/movimientos/nuevo", headers={"HX-Request": "true"}, data=datos)
+    assert primera.status_code == 200 and segunda.status_code == 200
+    assert "txGuardado" in segunda.headers.get("HX-Trigger", "")      # el móvil lo da por enviado
+
+    conn = db.connect(db_path)
+    movimientos = repo.tx_rows(conn, month=(2026, 9))
+    assert len(movimientos) == 1 and movimientos[0]["amount"] == 1234
+    assert movimientos[0]["client_uid"] == "abc-123"
+    conn.close()
+
+
+def test_sin_uid_se_pueden_repetir_movimientos_iguales(client, db_path):
+    """Dos cafés iguales el mismo día son dos movimientos, no un duplicado."""
+    conn = db.connect(db_path)
+    cats, envs, accs = ids(conn)
+    conn.close()
+    datos = {"tipo": "gasto", "importe": "1,60", "categoria_id": cats["Ocio"], "sobre_id": "",
+             "cuenta_id": accs["Cuenta corriente"], "fecha": "2026-09-19", "concepto": "Café"}
+    client.post("/movimientos/nuevo", data=datos)
+    client.post("/movimientos/nuevo", data=datos)
+    conn = db.connect(db_path)
+    assert len(repo.tx_rows(conn, month=(2026, 9))) == 2
+    conn.close()
+
+
+def test_con_pin_el_movil_no_guarda_copias_de_las_pantallas(client, db_path):
+    """Si no, al abrir la app sin conexión se verían sin pedir el PIN."""
+    assert "X-Sin-Copia" not in get(client, "/").headers
+    client.post("/ajustes/pin", data={"pin": "1234", "pin2": "1234"})
+    assert get(client, "/").headers.get("X-Sin-Copia") == "1"
+    client.post("/ajustes/pin/quitar")
+    assert "X-Sin-Copia" not in get(client, "/").headers
+
+
+def test_se_puede_elegir_si_el_movil_guarda_copias(client, db_path):
+    assert "X-Sin-Copia" not in get(client, "/").headers          # sin PIN, guarda
+    client.post("/ajustes/pin", data={"pin": "1234", "pin2": "1234"})
+    assert get(client, "/").headers.get("X-Sin-Copia") == "1"     # con PIN, por defecto no
+
+    client.post("/ajustes/sin-conexion", data={"activo": "1"})    # pero se puede activar
+    assert "X-Sin-Copia" not in get(client, "/").headers
+    client.post("/ajustes/sin-conexion", data={})                 # y volver a quitar
+    assert get(client, "/").headers.get("X-Sin-Copia") == "1"
+    client.post("/ajustes/pin/quitar")

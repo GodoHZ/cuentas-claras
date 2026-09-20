@@ -32,6 +32,12 @@ del mes, porque ya lo habías guardado.
   más exportar a CSV/JSON e importar el CSV de una hoja de cálculo.
 - **Dos diseños, un solo código**: barra inferior y botón flotante en el móvil;
   menú lateral y contenido a varias columnas a partir de 900 px.
+- **Funciona sin conexión**: guarda la última versión de cada pantalla para poder
+  consultarla, y lo que apuntes sin red se queda en el móvil y se envía solo al
+  volver. Cada movimiento lleva un identificador propio, así que un reenvío nunca
+  duplica nada. Con el PIN activado no se guarda ninguna copia en el móvil.
+- **Gestos de móvil**: deslizar un movimiento hacia la izquierda para borrarlo,
+  tirar hacia abajo para actualizar y transiciones suaves entre pantallas.
 
 Todo está en castellano, en euros y con fechas dd/mm/aaaa.
 
@@ -39,7 +45,7 @@ Todo está en castellano, en euros y con fechas dd/mm/aaaa.
 
 ```bash
 git clone https://github.com/GodoHZ/cuentas-claras.git && cd cuentas-claras
-docker build -t finanzas-app:1.7.0 --build-arg VERSION=1.7.0 .
+docker build -t finanzas-app:1.9.0 --build-arg VERSION=1.9.0 .
 docker compose up -d
 ```
 

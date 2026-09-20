@@ -8,7 +8,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS settings (
@@ -52,12 +52,16 @@ CREATE TABLE IF NOT EXISTS transactions (
     concept     TEXT NOT NULL DEFAULT '',
     amount      INTEGER NOT NULL CHECK (amount > 0),
     created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    -- identificador que pone el móvil al apuntar sin conexión: si el envío se
+    -- repite, el movimiento no se duplica (ver el índice de más abajo)
+    client_uid  TEXT,
     CHECK (type NOT IN ('aporte_sobre', 'retiro_sobre') OR envelope_id IS NOT NULL),
     CHECK (type NOT IN ('ingreso', 'gasto') OR category_id IS NOT NULL)
 );
 CREATE INDEX IF NOT EXISTS ix_transactions_date ON transactions(date);
 CREATE INDEX IF NOT EXISTS ix_transactions_envelope ON transactions(envelope_id);
 CREATE INDEX IF NOT EXISTS ix_transactions_category ON transactions(category_id);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_transactions_uid ON transactions(client_uid) WHERE client_uid IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS loans (
     id             INTEGER PRIMARY KEY,
@@ -86,11 +90,28 @@ def connect(path: str | Path) -> sqlite3.Connection:
     return conn
 
 
+def migrar(conn) -> None:
+    """Cambios de esquema sobre bases de datos que ya existían.
+
+    Se ejecuta ANTES de crear el esquema: si no, los índices nuevos fallarían
+    al apoyarse en columnas que la tabla vieja todavía no tiene.
+    """
+    existe = conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'transactions'").fetchone()
+    if not existe:
+        return                                             # base de datos nueva: la crea el esquema
+    columnas = {r["name"] for r in conn.execute("PRAGMA table_info(transactions)")}
+    if "client_uid" not in columnas:                       # versión 1 -> 2
+        conn.execute("ALTER TABLE transactions ADD COLUMN client_uid TEXT")
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_transactions_uid "
+                     "ON transactions(client_uid) WHERE client_uid IS NOT NULL")
+
+
 def init_db(path: str | Path) -> None:
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     conn = connect(path)
     try:
         conn.execute("PRAGMA journal_mode = WAL")
+        migrar(conn)
         conn.executescript(SCHEMA)
         if conn.execute("PRAGMA user_version").fetchone()[0] < SCHEMA_VERSION:
             conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
