@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Resumen · Finanzas{% endblock %}
+{% block heading %}Resumen de 12 meses{% endblock %}
+{% set back = "/mas" %}
+{% block main %}
+{% set py, pm = add_months(start[0], start[1], -12) %}{% set ny, nm = add_months(start[0], start[1], 12) %}
+<div class="month-nav">
+  <a href="/resumen?desde={{ month_key(py, pm) }}" aria-label="12 meses anteriores">‹</a>
+  <strong>{{ month_short(start[0], start[1]) }} – {{ month_short(months[-1].year, months[-1].month) }}</strong>
+  <a href="/resumen?desde={{ month_key(ny, nm) }}" aria-label="12 meses siguientes">›</a>
+</div>
+
+<div class="card chart-card">
+  <h2>Ingresos, gastos y aportado por mes</h2>
+  <div class="chart-legend" aria-hidden="true">
+    <span><i class="sw sw-1"></i>Ingresos</span><span><i class="sw sw-2"></i>Gastos de la nómina</span><span><i class="sw sw-3"></i>Aportado a sobres</span>
+  </div>
+  <div class="chart-box"><canvas id="chart-resumen" data-chart="resumen" role="img"
+       aria-label="Gráfico de barras con ingresos, gastos y aportado de cada mes. Los mismos datos están en la tabla de abajo."></canvas></div>
+  <script type="application/json" id="chart-resumen-data">{{ chart_json|safe }}</script>
+  <p class="hint">Cada mes tiene tres barras. Si la azul (ingresos) es más alta que las otras dos juntas, ese mes te sobró dinero.</p>
+</div>
+
+<div class="card">
+  <h2>Mes a mes</h2>
+  <div class="table-scroll">
+    <table class="data">
+      <thead><tr><th>Mes</th><th>Ingresos</th><th>Gastos</th><th>Aportado</th><th>Libre</th><th class="col-ahorro">% ahorro</th></tr></thead>
+      <tbody>
+        {% for m in months %}
+        <tr class="{{ 'current' if (m.year, m.month) == (hoy.year, hoy.month) }}">
+          <th scope="row"><a href="/?mes={{ month_key(m.year, m.month) }}">{{ month_short(m.year, m.month) }}</a></th>
+          <td class="num">{{ m.income|eur }}</td><td class="num">{{ m.payroll_spent|eur }}</td>
+          <td class="num">{{ m.saved|eur }}</td><td class="num {{ 'neg' if m.free < 0 }}">{{ m.free|eur }}</td>
+          <td class="num col-ahorro">{{ m.saved_ratio|pct }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot><tr><th scope="row">Total</th><td class="num">{{ total.income|eur }}</td><td class="num">{{ total.payroll_spent|eur }}</td>
+        <td class="num">{{ total.saved|eur }}</td><td class="num {{ 'neg' if total.free < 0 }}">{{ total.free|eur }}</td><td class="num col-ahorro">{{ total.saved_ratio|pct }}</td></tr></tfoot>
+    </table>
+  </div>
+  <p class="hint"><b>Gastos</b> son los de la nómina (sin lo pagado desde sobres). <b>Libre</b> = ingresos − gastos − aportado.
+    <b>% ahorro</b> (aportado ÷ ingresos) se ve girando el móvil o en pantalla grande. Toca un mes para ver su panel.</p>
+</div>
+{% if start != default_start %}<p class="center"><a href="/resumen">Volver al año que empieza en {{ month_short(default_start[0], default_start[1]) }}</a></p>{% endif %}
+{% endblock %}

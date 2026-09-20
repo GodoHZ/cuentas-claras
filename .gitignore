@@ -1,0 +1,11 @@
+data/
+backups/
+*.db
+docker-compose.local.yml
+DESPLIEGUE-NAS.md
+*.db-wal
+*.db-shm
+.env
+__pycache__/
+*.pyc
+.pytest_cache/

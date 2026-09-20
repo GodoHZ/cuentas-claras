@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Más · Finanzas{% endblock %}
+{% block heading %}Más{% endblock %}
+{% from "_iconos.html" import icono %}
+{% block main %}
+<div class="card menu">
+  <a href="/resumen"><span>{{ icono("resumen") }} Resumen de 12 meses</span><small>Ingresos, gastos y ahorro mes a mes</small></a>
+  <a href="/deudas"><span>{{ icono("deudas") }} Deudas</span><small>Préstamos, cuotas y cuánto queda</small></a>
+  <a href="/presupuesto"><span>{{ icono("presupuesto") }} Presupuesto</span><small>Cuánto llevas gastado de cada cosa</small></a>
+  <a href="/ajustes"><span>{{ icono("ajustes") }} Ajustes</span><small>Categorías, sobres, préstamos, copias y exportar</small></a>
+</div>
+
+<div class="card">
+  <p class="label">Copia de seguridad</p>
+  {% if last_backup %}
+  <p>Última: <strong>{{ last_backup.modified.strftime('%d/%m/%Y a las %H:%M') }}</strong></p>
+  <p class="hint">La app hace una copia cada día y guarda las de los últimos {{ keep_days }} días.</p>
+  {% else %}
+  <p>Todavía no hay ninguna copia.</p>
+  <p class="hint">La primera se hace sola en cuanto pase una hora de funcionamiento.</p>
+  {% endif %}
+  <a class="more" href="/ajustes?abierto=copias#copias">Ver copias ›</a>
+</div>
+
+<p class="muted small center">Finanzas · versión {{ version }}</p>
+{% endblock %}

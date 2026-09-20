@@ -1,0 +1,88 @@
+{# Formulario de movimiento: el del botón + (dialog=True) y el de editar.
+   Variables: opts (chips), f (valores y errores), action, dialog. #}
+{% set fid = "txform-qa" if dialog else "txform" %}
+<form id="{{ fid }}" class="txform" method="post" action="{{ action }}" novalidate
+      {% if dialog %}hx-post="{{ action }}" hx-target="this" hx-swap="outerHTML"{% endif %}
+      data-cuenta-general="{{ opts.default_account }}" data-cuenta-sobres="{{ opts.envelope_account }}">
+  {% if dialog %}<input type="hidden" name="origen" value="dialogo">{% endif %}
+  {% if f.errors %}
+  <div class="alert alert-error" role="alert">{% for e in f.errors %}<p>{{ e }}</p>{% endfor %}</div>
+  {% endif %}
+
+  <label class="amount">
+    <span class="sr">Importe en euros</span>
+    <input name="importe" inputmode="decimal" autocomplete="off" autocorrect="off" spellcheck="false"
+           enterkeyhint="done" placeholder="0,00" value="{{ f.importe }}">
+    <span class="amount-eur" aria-hidden="true">€</span>
+  </label>
+
+  <fieldset class="types">
+    <legend class="sr">Tipo de movimiento</legend>
+    {% for key, label, hint in [("gasto", "Gasto", "Pago algo"), ("ingreso", "Ingreso", "Cobro algo"),
+                                ("aporte_sobre", "Aporte a sobre", "Guardo en un sobre"),
+                                ("retiro_sobre", "Retiro de sobre", "Saco sin gastarlo")] %}
+    <label class="type type-{{ key }}">
+      <input type="radio" name="tipo" value="{{ key }}" {% if f.tipo == key %}checked{% endif %}>
+      <span><b>{{ label }}</b><small>{{ hint }}</small></span>
+    </label>
+    {% endfor %}
+  </fieldset>
+
+{# las 8 más usadas a la vista; el resto detrás de «Ver todas» #}
+{% macro chips_categorias(lista, grupo, fid, elegida) %}
+  <input class="more-toggle" type="checkbox" id="{{ fid }}-mas-{{ grupo }}" aria-hidden="true" tabindex="-1">
+  <div class="chips">
+    {% for c in lista %}
+    <label class="chip{{ ' extra' if loop.index0 >= 8 }}"><input type="radio" name="categoria_id" value="{{ c.id }}" {% if elegida == c.id %}checked{% endif %}><span>{{ c.name }}</span></label>
+    {% endfor %}
+    {% if lista|length > 8 %}<label class="chip more-label" for="{{ fid }}-mas-{{ grupo }}"><span></span></label>{% endif %}
+  </div>
+{% endmacro %}
+
+  <div class="field" data-show="gasto">
+    <p class="legend">Categoría</p>
+    {{ chips_categorias(opts.cats_gasto, "g", fid, f.categoria_id) }}
+  </div>
+  <div class="field" data-show="ingreso">
+    <p class="legend">Categoría</p>
+    {{ chips_categorias(opts.cats_ingreso, "i", fid, f.categoria_id) }}
+  </div>
+
+  <div class="field" data-show="gasto aporte retiro">
+    <p class="legend" data-show="gasto">¿Lo pagas con dinero de un sobre?</p>
+    <p class="legend" data-show="aporte">¿En qué sobre lo guardas?</p>
+    <p class="legend" data-show="retiro">¿De qué sobre lo sacas?</p>
+    <div class="chips">
+      <label class="chip" data-show="gasto"><input type="radio" name="sobre_id" value="" {% if not f.sobre_id %}checked{% endif %}><span>No, de la nómina</span></label>
+      {% for e in opts.envelopes %}
+      <label class="chip chip-env"><input type="radio" name="sobre_id" value="{{ e.id }}" {% if f.sobre_id == e.id %}checked{% endif %}><span>{{ e.name }}</span></label>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="field">
+    <p class="legend">Cuenta</p>
+    <div class="chips">
+      {% for a in opts.accounts %}
+      <label class="chip"><input type="radio" name="cuenta_id" value="{{ a.id }}" {% if f.cuenta_id == a.id %}checked{% endif %}><span>{{ a.name }}</span></label>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="field">
+    <label class="legend" for="{{ fid }}-fecha">Fecha</label>
+    <div class="date-row">
+      <input id="{{ fid }}-fecha" type="date" name="fecha" value="{{ f.fecha }}">
+      <button type="button" class="mini" data-fecha="0">Hoy</button>
+      <button type="button" class="mini" data-fecha="-1">Ayer</button>
+    </div>
+  </div>
+
+  <div class="field">
+    <label class="legend" for="{{ fid }}-concepto">Concepto <span class="muted">(opcional)</span></label>
+    <input id="{{ fid }}-concepto" name="concepto" value="{{ f.concepto }}" maxlength="200" autocomplete="off"
+           placeholder="Ej.: cena con amigos" enterkeyhint="done">
+  </div>
+
+  <button type="submit" class="btn btn-primary btn-block">{{ submit_label or ("Apuntar" if dialog else "Guardar cambios") }}</button>
+</form>

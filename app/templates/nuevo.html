@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}Apuntar · Finanzas{% endblock %}
+{% block heading %}Apuntar{% endblock %}
+{% block main %}
+<div class="card">
+  {% with opts=qa, f=form_values or qa_form, dialog=False, action="/movimientos/nuevo", submit_label="Apuntar" %}{% include "partials/txform.html" %}{% endwith %}
+</div>
+{% endblock %}

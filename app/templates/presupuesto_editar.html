@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Editar presupuestos · Finanzas{% endblock %}
+{% block heading %}Editar presupuestos{% endblock %}
+{% block main %}
+<form method="post" action="/presupuesto/editar">
+  <input type="hidden" name="mes" value="{{ month_key(year, month) }}">
+
+  <div class="card">
+    <p class="hint">Pon lo máximo que quieres gastar cada mes en cada cosa. Lo que dejes <strong>vacío o en 0</strong>
+      no tiene tope: seguirá contando el gasto, pero sin barra ni avisos. Vale para todos los meses, no solo para este.</p>
+  </div>
+
+  <div class="card">
+    {% for c in cats %}
+    <div class="budget-edit">
+      <label for="pres-{{ c.id }}">{{ c.name }}{% if not c.active %} <span class="badge">archivada</span>{% endif %}</label>
+      <div class="budget-edit-input">
+        <input id="pres-{{ c.id }}" name="presupuesto_{{ c.id }}" inputmode="decimal" autocomplete="off"
+               value="{{ c.budget|importe_input }}" placeholder="sin tope">
+        <span class="suffix">€/mes</span>
+      </div>
+      {% if spent.get(c.id) %}<p class="hint">Este mes llevas gastado {{ spent[c.id]|eur }}</p>{% endif %}
+    </div>
+    {% else %}
+    <p class="muted">Todavía no tienes categorías de gasto. Crea la primera aquí abajo.</p>
+    {% endfor %}
+  </div>
+
+  <div class="card">
+    <p class="legend">Añadir una categoría nueva</p>
+    <div class="stack">
+      <input name="nueva_categoria" placeholder="Nombre (p. ej. Mascotas)" maxlength="60" autocomplete="off">
+      <input name="nuevo_presupuesto" inputmode="decimal" placeholder="Tope al mes en € (opcional)" autocomplete="off">
+    </div>
+    <p class="hint">Para ingresos, sobres, cuentas o préstamos: <a href="/ajustes">Ajustes</a>.</p>
+  </div>
+
+  <button type="submit" class="btn btn-primary btn-block">Guardar presupuestos</button>
+  <a class="btn btn-block" href="/presupuesto?mes={{ month_key(year, month) }}">Cancelar</a>
+</form>
+{% endblock %}

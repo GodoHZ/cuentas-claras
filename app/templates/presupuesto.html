@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "_macros.html" import month_nav, budget_bar %}
+{% from "_iconos.html" import icono, icono_nivel %}
+{% block title %}Presupuesto · Finanzas{% endblock %}
+{% block heading %}Presupuesto{% endblock %}
+{% block main %}
+{{ month_nav("/presupuesto", year, month) }}
+
+<div class="card total-card">
+  <p class="label">Presupuesto del mes</p>
+  <p class="stat-num num">{{ b.total.spent|eur }} <span class="of">de {{ b.total.budget|eur }}</span></p>
+  {{ budget_bar(b.total, "Total de las categorías con presupuesto") }}
+  <p class="hint">El presupuesto es lo máximo que te propones gastar cada mes en cada cosa. Aquí cuentan
+    <strong>todos</strong> los gastos, también los pagados desde un sobre.</p>
+  <p class="legend-levels"><span class="lv lv-ok">menos del {{ b.warn_pct|pct }}</span>
+    <span class="lv lv-aviso">{{ b.warn_pct|pct }}–100 %</span>
+    <span class="lv lv-pasado">más del 100 %</span></p>
+</div>
+
+<div class="card">
+  {% for l in b.lines %}{{ budget_bar(l.line, l.cat.name) }}{% else %}
+  <p><strong>Todavía no has puesto ningún presupuesto.</strong></p>
+  <p class="hint">Un presupuesto es lo máximo que quieres gastar al mes en cada cosa. Ponlos a tu gusto:
+    puedes cambiarlos cuando quieras.</p>
+  {% endfor %}
+</div>
+
+<a class="btn btn-primary btn-block" href="/presupuesto/editar?mes={{ month_key(year, month) }}">
+  {{ icono("editar") }} Editar presupuestos</a>
+<p class="hint center">Cambia los topes, crea categorías nuevas o quita los que no quieras. Es todo tuyo.</p>
+
+{% if b.others %}
+<h2 class="section-title">Otros gastos del mes (sin presupuesto)</h2>
+<div class="card">
+  <ul class="plain">
+    {% for o in b.others %}<li class="row-between"><span>{{ o.cat.name }}</span><span class="num">{{ o.line.spent|eur }}</span></li>{% endfor %}
+    <li class="row-between strong"><span>Total</span><span class="num">{{ b.others_total|eur }}</span></li>
+  </ul>
+  <p class="hint">Categorías con presupuesto 0 (gastos puntuales o pagados con un sobre, como la entrada del coche).</p>
+</div>
+{% endif %}
+{% endblock %}

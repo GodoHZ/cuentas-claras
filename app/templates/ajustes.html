@@ -1,0 +1,340 @@
+{% extends "base.html" %}
+{% block title %}Ajustes · Finanzas{% endblock %}
+{% block heading %}Ajustes{% endblock %}
+{% set back = "/mas" %}
+
+{% macro order_buttons(kind, row) %}
+<span class="order">
+  <form method="post" action="/ajustes/lista/{{ kind }}/{{ row.id }}/mover"><input type="hidden" name="dir" value="arriba"><button class="mini" type="submit" aria-label="Subir">↑</button></form>
+  <form method="post" action="/ajustes/lista/{{ kind }}/{{ row.id }}/mover"><input type="hidden" name="dir" value="abajo"><button class="mini" type="submit" aria-label="Bajar">↓</button></form>
+</span>
+{% endmacro %}
+
+{# Los botones de acción NO pueden ir dentro del formulario de editar: HTML no
+   permite formularios anidados y el navegador se come el de dentro. #}
+{% macro row_actions(kind, row, borrable) %}
+<div class="row-actions">
+  <form method="post" action="/ajustes/lista/{{ kind }}/{{ row.id }}/archivar"
+        hx-confirm="{% if row.active %}¿Archivar «{{ row.name }}»? Dejará de salir al apuntar, pero el historial se mantiene.{% else %}¿Volver a usar «{{ row.name }}»?{% endif %}">
+    <button class="btn btn-small" type="submit">{{ 'Archivar' if row.active else 'Reactivar' }}</button>
+  </form>
+  {% if borrable %}
+  <form method="post" action="/ajustes/lista/{{ kind }}/{{ row.id }}/borrar"
+        hx-confirm="¿Borrar «{{ row.name }}» del todo? No tiene ningún movimiento, así que no se pierde nada.">
+    <button class="btn btn-small btn-danger" type="submit">Borrar</button>
+  </form>
+  {% endif %}
+  {{ order_buttons(kind, row) }}
+</div>
+{% endmacro %}
+
+{% from "_iconos.html" import icono %}
+{% block main %}
+<details id="general" {% if open == 'general' %}open{% endif %}>
+  <summary>Nómina y resumen</summary>
+  <div class="card">
+    <form method="post" action="/ajustes/general" class="stack">
+      <label class="legend" for="nomina">Nómina de referencia</label>
+      <input id="nomina" name="nomina" inputmode="decimal" value="{{ salary|importe_input }}">
+      <p class="hint">Se usa solo para calcular qué parte de tu sueldo se va en cuotas de préstamos.</p>
+
+      <label class="legend" for="mes_inicio">Mes de inicio del resumen</label>
+      <input id="mes_inicio" name="mes_inicio" type="month" value="{{ start_month }}">
+      <p class="hint">El resumen enseña 12 meses a partir de este.</p>
+
+      <label class="legend" for="cat_amort">Categoría de amortización</label>
+      <select id="cat_amort" name="categoria_amortizacion">
+        <option value="">— ninguna —</option>
+        {% for c in categories %}<option value="{{ c.id }}" {% if amort_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+      </select>
+      <p class="hint">Los gastos de esta categoría se suman como «amortizado extra» en Deudas.</p>
+
+      <div class="field-row">
+        <div class="stack">
+          <label class="legend" for="cuenta_general">Cuenta por defecto (gastos e ingresos)</label>
+          <select id="cuenta_general" name="cuenta_general">
+            {% for a in accounts %}<option value="{{ a.id }}" {% if default_account_id == a.id %}selected{% endif %}>{{ a.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="stack">
+          <label class="legend" for="cuenta_sobres">Cuenta por defecto (sobres)</label>
+          <select id="cuenta_sobres" name="cuenta_sobres">
+            {% for a in accounts %}<option value="{{ a.id }}" {% if envelope_account_id == a.id %}selected{% endif %}>{{ a.name }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-primary" type="submit">Guardar</button>
+    </form>
+  </div>
+</details>
+
+<details id="categorias" {% if open == 'categorias' %}open{% endif %}>
+  <summary>Categorías <span class="count">{{ categories|length }}</span></summary>
+  <div class="card">
+    {% for c in categories %}
+    <details class="row-item {{ 'archived' if not c.active }}">
+      <summary><span>{{ c.name }}</span><span class="muted">{{ c.budget|importe_input or '—' }}{% if not c.active %} · archivada{% endif %}</span></summary>
+      <form method="post" action="/ajustes/lista/categorias/{{ c.id }}" class="stack">
+        <label class="legend" for="cat-{{ c.id }}-n">Nombre</label>
+        <input id="cat-{{ c.id }}-n" name="nombre" value="{{ c.name }}" maxlength="60">
+        <div class="field-row">
+          <div class="stack">
+            <label class="legend" for="cat-{{ c.id }}-t">Tipo</label>
+            <select id="cat-{{ c.id }}-t" name="tipo">
+              <option value="gasto" {% if c.kind == 'gasto' %}selected{% endif %}>Gasto</option>
+              <option value="ingreso" {% if c.kind == 'ingreso' %}selected{% endif %}>Ingreso</option>
+            </select>
+          </div>
+          <div class="stack">
+            <label class="legend" for="cat-{{ c.id }}-p">Presupuesto mensual (€)</label>
+            <input id="cat-{{ c.id }}-p" name="presupuesto" inputmode="decimal" value="{{ c.budget|importe_input }}">
+          </div>
+        </div>
+        <button class="btn btn-primary btn-small" type="submit">Guardar</button>
+      </form>
+      {{ row_actions('categorias', c, c.id not in usados.categorias) }}
+    </details>
+    {% endfor %}
+    <details class="row-item nuevo">
+      <summary><span>{{ icono("nuevo") }} Nueva categoría</span></summary>
+      <form method="post" action="/ajustes/lista/categorias" class="stack">
+        <input name="nombre" placeholder="Nombre" maxlength="60">
+        <select name="tipo"><option value="gasto">Gasto</option><option value="ingreso">Ingreso</option></select>
+        <input name="presupuesto" inputmode="decimal" placeholder="Presupuesto mensual (opcional)">
+        <button class="btn btn-primary btn-small" type="submit">Crear</button>
+      </form>
+    </details>
+  </div>
+</details>
+
+<details id="sobres" {% if open == 'sobres' %}open{% endif %}>
+  <summary>Sobres <span class="count">{{ envelopes|length }}</span></summary>
+  <div class="card">
+    {% for e in envelopes %}
+    <details class="row-item {{ 'archived' if not e.active }}">
+      <summary><span>{{ e.name }}</span><span class="muted">{% if e.target %}objetivo {{ e.target|eur }}{% elif e.monthly %}{{ e.monthly|eur }}/mes{% else %}—{% endif %}{% if not e.active %} · archivado{% endif %}</span></summary>
+      <form method="post" action="/ajustes/lista/sobres/{{ e.id }}" class="stack">
+        <label class="legend" for="env-{{ e.id }}-n">Nombre</label>
+        <input id="env-{{ e.id }}-n" name="nombre" value="{{ e.name }}" maxlength="60">
+        <div class="field-row">
+          <div class="stack">
+            <label class="legend" for="env-{{ e.id }}-o">Objetivo (€)</label>
+            <input id="env-{{ e.id }}-o" name="objetivo" inputmode="decimal" value="{{ e.target|importe_input }}">
+          </div>
+          <div class="stack">
+            <label class="legend" for="env-{{ e.id }}-a">Aporte mensual (€)</label>
+            <input id="env-{{ e.id }}-a" name="aporte" inputmode="decimal" value="{{ e.monthly|importe_input }}">
+          </div>
+        </div>
+        <label class="legend" for="env-{{ e.id }}-nota">Nota</label>
+        <input id="env-{{ e.id }}-nota" name="nota" value="{{ e.note }}" maxlength="200">
+        <button class="btn btn-primary btn-small" type="submit">Guardar</button>
+      </form>
+      {{ row_actions('sobres', e, e.id not in usados.sobres) }}
+    </details>
+    {% endfor %}
+    <details class="row-item nuevo">
+      <summary><span>{{ icono("nuevo") }} Nuevo sobre</span></summary>
+      <form method="post" action="/ajustes/lista/sobres" class="stack">
+        <input name="nombre" placeholder="Nombre" maxlength="60">
+        <input name="objetivo" inputmode="decimal" placeholder="Objetivo en € (opcional)">
+        <input name="aporte" inputmode="decimal" placeholder="Aporte mensual en € (opcional)">
+        <input name="nota" placeholder="Nota (opcional)" maxlength="200">
+        <button class="btn btn-primary btn-small" type="submit">Crear</button>
+      </form>
+    </details>
+  </div>
+</details>
+
+<details id="cuentas" {% if open == 'cuentas' %}open{% endif %}>
+  <summary>Cuentas <span class="count">{{ accounts|length }}</span></summary>
+  <div class="card">
+    {% for a in accounts %}
+    <details class="row-item {{ 'archived' if not a.active }}">
+      <summary><span>{{ a.name }}</span><span class="muted">{% if not a.active %}archivada{% endif %}</span></summary>
+      <form method="post" action="/ajustes/lista/cuentas/{{ a.id }}" class="stack">
+        <input name="nombre" value="{{ a.name }}" maxlength="60" aria-label="Nombre de la cuenta">
+        <button class="btn btn-primary btn-small" type="submit">Guardar</button>
+      </form>
+      {{ row_actions('cuentas', a, a.id not in usados.cuentas) }}
+    </details>
+    {% endfor %}
+    <details class="row-item nuevo">
+      <summary><span>{{ icono("nuevo") }} Nueva cuenta</span></summary>
+      <form method="post" action="/ajustes/lista/cuentas" class="stack">
+        <input name="nombre" placeholder="Nombre" maxlength="60">
+        <button class="btn btn-primary btn-small" type="submit">Crear</button>
+      </form>
+    </details>
+  </div>
+</details>
+
+<details id="prestamos" {% if open == 'prestamos' %}open{% endif %}>
+  <summary>Préstamos <span class="count">{{ loans|length }}</span></summary>
+  <div class="card">
+    {% for l in loans %}
+    <details class="row-item">
+      <summary><span>{{ l.name }}</span><span class="muted">{{ l.installment|eur }}/mes</span></summary>
+      <form method="post" action="/ajustes/prestamos/{{ l.id }}" class="stack">
+        <label class="legend" for="loan-{{ l.id }}-n">Nombre</label>
+        <input id="loan-{{ l.id }}-n" name="nombre" value="{{ l.name }}" maxlength="60">
+        <div class="field-row">
+          <div class="stack">
+            <label class="legend" for="loan-{{ l.id }}-c">Cuota mensual (€)</label>
+            <input id="loan-{{ l.id }}-c" name="cuota" inputmode="decimal" value="{{ l.installment|importe_input }}">
+          </div>
+          <div class="stack">
+            <label class="legend" for="loan-{{ l.id }}-f">1.ª cuota</label>
+            <input id="loan-{{ l.id }}-f" name="primera" type="date" value="{{ l.first_date }}">
+          </div>
+        </div>
+        <label class="legend" for="loan-{{ l.id }}-x">Número de cuotas</label>
+        <input id="loan-{{ l.id }}-x" name="cuotas" inputmode="numeric" value="{{ l.n_installments }}">
+        <div class="row-actions">
+          <button class="btn btn-primary btn-small" type="submit">Guardar</button>
+        </div>
+      </form>
+      <form method="post" action="/ajustes/prestamos/{{ l.id }}/borrar" hx-confirm="¿Borrar el préstamo «{{ l.name }}»?">
+        <button class="link danger" type="submit">Borrar préstamo</button>
+      </form>
+    </details>
+    {% endfor %}
+    <details class="row-item nuevo">
+      <summary><span>{{ icono("nuevo") }} Nuevo préstamo</span></summary>
+      <form method="post" action="/ajustes/prestamos" class="stack">
+        <input name="nombre" placeholder="Nombre" maxlength="60">
+        <input name="cuota" inputmode="decimal" placeholder="Cuota mensual (€)">
+        <input name="primera" type="date" placeholder="1.ª cuota">
+        <input name="cuotas" inputmode="numeric" placeholder="Número de cuotas">
+        <button class="btn btn-primary btn-small" type="submit">Crear</button>
+      </form>
+    </details>
+  </div>
+</details>
+
+<details id="copias" {% if open == 'copias' %}open{% endif %}>
+  <summary>Copias de seguridad <span class="count">{{ backup_count }}</span></summary>
+  <div class="card">
+    {% if backup_problem %}<div class="alert alert-error"><strong>Atención:</strong> {{ backup_problem|capitalize }}</div>{% endif %}
+    {% if backup_error %}<div class="alert alert-error">La última copia automática falló · {{ backup_error }}</div>{% endif %}
+    <p class="hint">La app hace una copia al día y guarda las de los últimos {{ keep_days }} días en
+      el disco de copias configurado. Base de datos actual: {{ (db_size / 1024)|round|int }} KB.</p>
+    <form method="post" action="/ajustes/copia"><button class="btn btn-primary" type="submit">Hacer una copia ahora</button></form>
+    <ul class="plain">
+      {% for b in backups %}
+      <li class="row-between">
+        <span>{{ b.modified.strftime('%d/%m/%Y %H:%M') }}{% if b.manual %} <span class="badge">manual</span>{% endif %}</span>
+        <span class="muted num">{{ (b.size / 1024)|round|int }} KB</span>
+        <a class="link" href="/ajustes/copia/{{ b.path.name }}" hx-boost="false" download>Descargar</a>
+      </li>
+      {% else %}<li class="muted">Todavía no hay copias.</li>{% endfor %}
+    </ul>
+  </div>
+</details>
+
+<details id="exportar" {% if open == 'exportar' %}open{% endif %}>
+  <summary>Exportar e importar</summary>
+  <div class="card stack">
+    <p class="hint">Exportar te descarga todos tus datos. El CSV de movimientos se puede volver a importar aquí.</p>
+    <a class="btn" href="/exportar/csv" hx-boost="false" download>Exportar a CSV (zip)</a>
+    <a class="btn" href="/exportar/json" hx-boost="false" download>Exportar a JSON</a>
+    <a class="btn btn-primary" href="/ajustes/importar">Importar movimientos desde un CSV</a>
+  </div>
+</details>
+
+<details id="sobras" {% if open == 'sobras' %}open{% endif %}>
+  <summary>Sobras del mes {% if sweep.enabled %}<span class="count">automático</span>{% endif %}</summary>
+  <div class="card">
+    <p class="hint">Lo que te sobra cada mes (lo cobrado menos los gastos y lo ya guardado) puede irse solo a un sobre,
+      normalmente el colchón. El movimiento se apunta con fecha del último día de ese mes, así que ese mes queda a cero
+      y el dinero aparece guardado. Lo puedes editar o borrar como cualquier otro movimiento.</p>
+    <form method="post" action="/ajustes/sobras" class="stack">
+      <label class="check"><input type="checkbox" name="activo" value="1" {% if sweep.enabled %}checked{% endif %}>
+        Guardar las sobras solo, sin que yo haga nada</label>
+
+      <label class="legend" for="sobre-sobras">¿En qué sobre?</label>
+      <select id="sobre-sobras" name="sobre">
+        <option value="">— ninguno —</option>
+        {% for e in envelopes %}<option value="{{ e.id }}" {% if sweep.envelope and sweep.envelope.id == e.id %}selected{% endif %}>{{ e.name }}</option>{% endfor %}
+      </select>
+
+      <label class="legend" for="dia-sobras">¿Qué día del mes siguiente?</label>
+      <input id="dia-sobras" name="dia" inputmode="numeric" value="{{ sweep.day }}">
+      <p class="hint">Del 1 al 28. El día 1 se guardan las sobras del mes que acaba de terminar.</p>
+
+      <button class="btn btn-primary" type="submit">Guardar</button>
+    </form>
+    <p class="hint">Ojo: la app apunta el dinero en el sobre, pero <strong>no hace la transferencia</strong>.
+      Acuérdate de moverlo de verdad; si no, el cuadre te dirá que faltan.</p>
+  </div>
+</details>
+
+<details id="reglas" {% if open == 'reglas' %}open{% endif %}>
+  <summary>Reglas y avisos</summary>
+  <div class="card">
+    <p class="hint">Los números con los que la app decide cuándo avisarte. Si no los tocas, se quedan como vienen de fábrica.</p>
+    <form method="post" action="/ajustes/reglas" class="stack">
+      <label class="legend" for="r-aviso">Avisar cuando lleves gastado este % del presupuesto</label>
+      <input id="r-aviso" name="budget_warn_pct" inputmode="numeric" value="{{ rules.budget_warn_pct }}">
+      <p class="hint">De fábrica 80. Por debajo, la barra sale normal; de ahí al 100 %, amarilla; pasado, roja.</p>
+
+      <label class="legend" for="r-cuotas">Avisar cuando las cuotas pasen este % de la nómina</label>
+      <input id="r-cuotas" name="installments_limit_pct" inputmode="numeric" value="{{ rules.installments_limit_pct }}">
+      <p class="hint">De fábrica 35.</p>
+
+      <label class="legend" for="r-cuadre">Diferencia de cuadre que no preocupa (€)</label>
+      <input id="r-cuadre" name="reconcile_small_cents" inputmode="decimal" value="{{ rules.reconcile_small_cents|importe_input }}">
+      <p class="hint">De fábrica 20 €. Si sobra menos que esto, la app lo achaca a intereses.</p>
+
+      <label class="legend" for="r-copias">Días de copias de seguridad que se guardan</label>
+      <input id="r-copias" name="backup_keep_days" inputmode="numeric" value="{{ rules.backup_keep_days }}">
+      <p class="hint">De fábrica 30.</p>
+
+      <button class="btn btn-primary" type="submit">Guardar reglas</button>
+    </form>
+    <form method="post" action="/ajustes/restablecer-reglas" hx-confirm="¿Volver a los valores de fábrica?">
+      <button class="link" type="submit">Volver a los valores de fábrica</button>
+    </form>
+  </div>
+</details>
+
+<details id="cero" {% if open == 'cero' %}open{% endif %}>
+  <summary>Empezar de cero</summary>
+  <div class="card">
+    <p class="hint">Para dejar la app limpia: por ejemplo si quieres empezar tus cuentas desde hoy, o si la instala otra
+      persona y no quiere mis categorías. <strong>Antes de borrar, la app hace siempre una copia de seguridad</strong>,
+      así que se puede recuperar (Ajustes → Copias de seguridad).</p>
+    <form method="post" action="/ajustes/empezar-de-cero" class="stack">
+      <label class="check"><input type="radio" name="alcance" value="movimientos" checked>
+        Borrar solo los movimientos y los saldos apuntados (se quedan tus categorías, sobres, cuentas y préstamos)</label>
+      <label class="check"><input type="radio" name="alcance" value="todo">
+        Borrarlo todo y empezar en blanco (también categorías, sobres, cuentas y préstamos)</label>
+      <label class="legend" for="confirmar-borrado">Escribe BORRAR para confirmar</label>
+      <input id="confirmar-borrado" name="confirmacion" autocomplete="off" placeholder="BORRAR">
+      <button class="btn btn-danger" type="submit">Borrar</button>
+    </form>
+  </div>
+</details>
+
+<details id="pin" {% if open == 'pin' %}open{% endif %}>
+  <summary>PIN {% if pin_enabled %}<span class="count">activado</span>{% endif %}</summary>
+  <div class="card">
+    <p class="hint">La app no está en internet, pero sí la alcanza cualquier aparato de tu red de casa (y los de tu
+      tailnet). El PIN es la forma de que solo entres tú.</p>
+    <form method="post" action="/ajustes/pin" class="stack">
+      <label class="legend" for="pin1">PIN nuevo (4 a 8 cifras)</label>
+      <input id="pin1" name="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="new-password">
+      <label class="legend" for="pin2">Repítelo</label>
+      <input id="pin2" name="pin2" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="new-password">
+      <button class="btn btn-primary" type="submit">{{ 'Cambiar PIN' if pin_enabled else 'Activar PIN' }}</button>
+    </form>
+    {% if pin_enabled %}
+    <form method="post" action="/ajustes/pin/quitar" hx-confirm="¿Quitar el PIN? La app dejará de pedirlo.">
+      <button class="link danger" type="submit">Quitar el PIN</button>
+    </form>
+    {% endif %}
+  </div>
+</details>
+
+<p class="muted small center">Versión {{ version }}</p>
+{% endblock %}

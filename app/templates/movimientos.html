@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% from "_macros.html" import month_nav, tx_row %}
+{% block title %}Movimientos · Finanzas{% endblock %}
+{% block heading %}Movimientos{% endblock %}
+{% block main %}
+{% if all_months %}
+<div class="month-nav"><span></span><strong>Todos los meses</strong><span></span></div>
+{% else %}
+{{ month_nav("/movimientos", year, month, ("&" ~ filter_qs) if filter_qs else "") }}
+{% endif %}
+
+<form class="filters" action="/movimientos" method="get"
+      hx-get="/movimientos" hx-trigger="change" hx-target="#main" hx-select="#main" hx-swap="outerHTML" hx-push-url="true">
+  <input type="hidden" name="mes" value="{{ 'todos' if all_months else month_key(year, month) }}">
+  <label><span class="sr">Tipo</span>
+    <select name="tipo">
+      <option value="">Todos los tipos</option>
+      {% for k, label in TYPES.items() %}<option value="{{ k }}" {% if filters.tipo == k %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+  </label>
+  <label><span class="sr">Sobre</span>
+    <select name="sobre">
+      <option value="">Todos los sobres</option>
+      {% for e in envelopes %}<option value="{{ e.id }}" {% if filters.sobre == e.id %}selected{% endif %}>{{ e.name }}{% if not e.active %} (archivado){% endif %}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="wide"><span class="sr">Categoría</span>
+    <select name="categoria">
+      <option value="">Todas las categorías</option>
+      {% for c in categories %}<option value="{{ c.id }}" {% if filters.categoria == c.id %}selected{% endif %}>{{ c.name }}{% if not c.active %} (archivada){% endif %}</option>{% endfor %}
+    </select>
+  </label>
+  <noscript><button class="btn" type="submit">Filtrar</button></noscript>
+</form>
+<p class="filter-links">
+  {% if all_months %}<a href="/movimientos{{ ('?' ~ filter_qs) if filter_qs }}">Ver por meses</a>
+  {% else %}<a href="/movimientos?mes=todos{{ ('&' ~ filter_qs) if filter_qs }}">Ver todos los meses</a>{% endif %}
+  {% if filtered %} · <a href="/movimientos?mes={{ 'todos' if all_months else month_key(year, month) }}">Quitar filtros</a>{% endif %}
+</p>
+
+{% if m and not filtered %}
+<p class="month-line">Ingresos <b class="num">{{ m.income|eur }}</b> · Gastos <b class="num">{{ m.payroll_spent|eur }}</b> · Aportado <b class="num">{{ m.saved|eur }}</b></p>
+{% endif %}
+
+<div id="lista">
+{% if rows %}
+  <p class="muted small">{{ rows|length }} movimiento{{ 's' if rows|length != 1 }}. Toca uno para editarlo o borrarlo.</p>
+  {% for day, items in rows|groupby('date')|reverse %}
+  <h3 class="day">{{ day|dia_largo }}{% if all_months %} de {{ day[:4] }}{% endif %}</h3>
+  <div class="card list">
+    {% for r in items %}{{ tx_row(r) }}{% endfor %}
+  </div>
+  {% endfor %}
+{% else %}
+  <div class="empty">
+    <p>No hay movimientos{% if filtered %} con estos filtros{% endif %}{% if not all_months %} en {{ month_name(year, month) }}{% endif %}.</p>
+    <p class="muted">Pulsa el botón <b>+</b> para apuntar uno.</p>
+  </div>
+{% endif %}
+</div>
+{% endblock %}

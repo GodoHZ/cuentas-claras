@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Deudas · Finanzas{% endblock %}
+{% block heading %}Deudas{% endblock %}
+{% set back = "/mas" %}
+{% block main %}
+<div class="card total-card {{ 'level-pasado' if d.ratio is not none and d.ratio > d.limit }}">
+  <p class="label">Cuotas / nómina</p>
+  <p class="hero-num num">{{ d.ratio|pct1 }}</p>
+  <p class="hint">
+    De tu nómina ({{ d.salary|eur }}) se van {{ d.monthly_total|eur }} al mes en cuotas.
+    {% if d.ratio is not none and d.ratio > d.limit %}<strong>Pasas del {{ d.limit|pct }}, que es el límite que tienes puesto.</strong>
+    {% else %}Tienes puesto el aviso en el {{ d.limit|pct }} (se cambia en Ajustes).{% endif %}
+  </p>
+</div>
+
+{% for item in d.loans %}
+{% set l, st = item.loan, item.st %}
+<section class="card loan">
+  <div class="row-between"><h2>{{ l.name }}</h2><span class="num strong">{{ st.installment|eur }}/mes</span></div>
+  <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="{{ st.count }}" aria-valuenow="{{ st.paid }}" aria-label="Cuotas pagadas de {{ l.name }}">
+    <span style="width: {{ (st.paid / st.count * 100)|round(1) }}%"></span>
+  </div>
+  <p class="env-meta"><span>{{ st.paid }} de {{ st.count }} cuotas pagadas</span><span>Quedan {{ st.pending }}</span></p>
+  <dl class="cuadre-table">
+    <dt>Primera cuota</dt><dd>{{ st.first|fecha }}</dd>
+    <dt>Última cuota</dt><dd>{{ st.last|fecha }}</dd>
+    <dt>Total pendiente</dt><dd class="num strong">{{ st.pending_total|eur }}</dd>
+  </dl>
+  <p class="hint">Total pendiente = cuotas que quedan × cuota mensual. No descuenta intereses ni amortizaciones.</p>
+</section>
+{% else %}
+<div class="empty"><p>No tienes préstamos apuntados.</p>
+  <p class="muted">Se añaden en <a href="/ajustes?abierto=prestamos#prestamos">Ajustes › Préstamos</a>.</p></div>
+{% endfor %}
+
+<div class="card">
+  <p class="label">Amortizado extra</p>
+  <p class="stat-num num">{{ d.extra|eur }}</p>
+  <p class="hint">Todo lo que has pagado de más para quitarte deuda antes de tiempo
+    (gastos de la categoría «{{ d.amort_category.name if d.amort_category else 'Amortización préstamo' }}»).</p>
+</div>
+<p class="muted small">Los préstamos se editan en <a href="/ajustes?abierto=prestamos#prestamos">Ajustes › Préstamos</a>.</p>
+{% endblock %}

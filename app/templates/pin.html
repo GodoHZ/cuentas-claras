@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}PIN · Finanzas{% endblock %}
+{% block heading %}Finanzas{% endblock %}
+{% block main %}
+<div class="card pin-card">
+  <p>Escribe tu PIN para entrar.</p>
+  {% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+  <form method="post" action="/pin" hx-boost="false">
+    <input type="hidden" name="next" value="{{ next }}">
+    <input class="pin-input" name="pin" type="password" inputmode="numeric" autocomplete="one-time-code"
+           pattern="[0-9]*" maxlength="8" autofocus aria-label="PIN">
+    <button class="btn btn-primary btn-block" type="submit">Entrar</button>
+  </form>
+</div>
+{% endblock %}

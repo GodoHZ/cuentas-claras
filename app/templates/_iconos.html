@@ -1,0 +1,41 @@
+{# Iconos en SVG, dibujados con el color del texto que los rodea.
+   Uso: {% from "_iconos.html" import icono %} … {{ icono("aviso") }} #}
+{% macro icono(nombre, clase="") %}
+<svg class="ico {{ clase }}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+{%- if nombre == "aviso" -%}
+  <path d="M12 4.5 2.8 20h18.4L12 4.5Z"/><path d="M12 10v4.2M12 17.2v.1"/>
+{%- elif nombre == "pasado" -%}
+  <circle cx="12" cy="12" r="8.4"/><path d="M6.6 6.6l10.8 10.8"/>
+{%- elif nombre == "ok" -%}
+  <circle cx="12" cy="12" r="8.4"/><path d="m8.2 12.3 2.6 2.6 5-5.4"/>
+{%- elif nombre == "check" -%}
+  <path d="m4.5 12.8 5 5L19.5 6.8"/>
+{%- elif nombre == "falta" -%}
+  <circle cx="12" cy="12" r="8.4"/><path d="M8.4 12h7.2"/>
+{%- elif nombre == "resumen" -%}
+  <path d="M4 19V5M4 19h16M8 15l4-5 3 3 4-6"/>
+{%- elif nombre == "deudas" -%}
+  <path d="M3 10 12 4l9 6M5 10v9h14v-9M9 19v-5h6v5"/>
+{%- elif nombre == "presupuesto" -%}
+  <path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>
+{%- elif nombre == "ajustes" -%}
+  <circle cx="12" cy="12" r="3.2"/><path d="M12 3.5v2M12 18.5v2M4.6 7.8l1.7 1M17.7 15.2l1.7 1M4.6 16.2l1.7-1M17.7 8.8l1.7-1"/>
+{%- elif nombre == "nota" -%}
+  <path d="M5 4.5h14v15H5zM8.5 9h7M8.5 12.5h7M8.5 16h4"/>
+{%- elif nombre == "editar" -%}
+  <path d="M4.5 19.5h3.4L18.2 9.2a1.7 1.7 0 0 0 0-2.4l-1-1a1.7 1.7 0 0 0-2.4 0L4.5 16.1z"/>
+{%- elif nombre == "nuevo" -%}
+  <circle cx="12" cy="12" r="8.4"/><path d="M12 8.2v7.6M8.2 12h7.6"/>
+{%- elif nombre == "copia" -%}
+  <path d="M8 4.5h11v11M4.5 8h11v11.5h-11z"/>
+{%- endif -%}
+</svg>
+{%- endmacro %}
+
+{# El icono que corresponde al nivel de un presupuesto o del cuadre #}
+{% macro icono_nivel(nivel) %}
+{%- if nivel == "pasado" or nivel == "falta" -%}{{ icono("pasado", "ico-pasado") }}
+{%- elif nivel == "aviso" or nivel == "sobra" -%}{{ icono("aviso", "ico-aviso") }}
+{%- elif nivel == "ok" -%}{{ icono("ok", "ico-ok") }}
+{%- endif -%}
+{% endmacro %}

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% from "_macros.html" import envelope_card %}
+{% from "_iconos.html" import icono %}
+{% block title %}{{ env.name }} · Finanzas{% endblock %}
+{% block heading %}{{ env.name }}{% endblock %}
+{% block main %}
+{{ envelope_card({"env": env, "st": st}, link=False) }}
+{% if env.note %}<p class="note">{{ icono("nota") }} {{ env.note }}</p>{% endif %}
+
+<div class="actions">
+  <a class="btn" href="/nuevo" hx-boost="false" data-qa='{"tipo": "aporte_sobre", "sobre": {{ env.id }}}'>Aportar</a>
+  <a class="btn" href="/nuevo" hx-boost="false" data-qa='{"tipo": "gasto", "sobre": {{ env.id }}}'>Gastar</a>
+  <a class="btn" href="/nuevo" hx-boost="false" data-qa='{"tipo": "retiro_sobre", "sobre": {{ env.id }}}'>Retirar</a>
+</div>
+<p class="hint">Aportar: guardas dinero en el sobre. Gastar: pagas algo con ese dinero. Retirar: lo sacas del sobre sin gastarlo.</p>
+
+<h2 class="section-title">Historial</h2>
+{% if history %}
+<div class="card list">
+  {% for h in history %}
+  <a class="tx hist" href="/movimientos/{{ h.row.id }}">
+    <span class="tx-main">
+      <span class="tx-title">{{ h.row.concept or h.row.category or TYPES[h.row.type] }}</span>
+      <span class="tx-sub">{{ h.row.date|fecha }} · {{ TYPES[h.row.type] }}{% if h.row.type == 'gasto' %} · {{ h.row.category }}{% endif %}</span>
+    </span>
+    <span class="tx-amount num">{{ h.delta|eur_sign }}<small>queda {{ h.balance|eur }}</small></span>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty"><p>Este sobre todavía no tiene movimientos.</p></div>
+{% endif %}
+{% endblock %}

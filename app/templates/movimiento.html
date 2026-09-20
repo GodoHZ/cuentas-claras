@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Editar movimiento · Finanzas{% endblock %}
+{% block heading %}Editar movimiento{% endblock %}
+{% block main %}
+<div class="card">
+  {% with dialog=False, action="/movimientos/" ~ tx.id %}{% include "partials/txform.html" %}{% endwith %}
+</div>
+
+<form class="danger-zone" method="post" action="/movimientos/{{ tx.id }}/borrar"
+      hx-confirm="¿Borrar este movimiento ({{ TYPES[tx.type]|lower }} de {{ tx.amount|eur }} del {{ tx.date|fecha }})? No se puede deshacer.">
+  <button type="submit" class="btn btn-danger btn-block">Borrar movimiento</button>
+</form>
+<p class="muted small center">Apuntado el {{ tx.created_at[:10]|fecha }}.</p>
+{% endblock %}

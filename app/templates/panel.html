@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% from "_macros.html" import envelope_card, month_nav %}
+{% from "_iconos.html" import icono, icono_nivel %}
+{% block heading %}{{ "Este mes" if is_current else month_name(year, month, True) }}{% endblock %}
+{% block main_class %}dos-columnas{% endblock %}
+{% block main %}
+{{ month_nav("/", year, month) }}
+
+<div class="col col-a">
+
+<section class="card hero {{ 'neg' if m.free < 0 }}">
+  <p class="label">Libre</p>
+  <p class="hero-num num">{{ m.free|eur }}</p>
+  <p class="hint">Lo que te queda de lo cobrado este mes después de tus gastos y de lo que has guardado en sobres.
+    {% if m.free < 0 %}<strong>Está en negativo: has gastado o guardado más de lo que has cobrado.</strong>{% endif %}</p>
+  <p class="formula">Ingresos − gastos − aportado = libre</p>
+</section>
+
+<section class="stats">
+  <div class="card stat">
+    <p class="label">Ingresos</p>
+    <p class="stat-num num">{{ m.income|eur }}</p>
+    <p class="hint">Lo que has cobrado este mes.</p>
+  </div>
+  <div class="card stat">
+    <p class="label">Gastos</p>
+    <p class="stat-num num">{{ m.payroll_spent|eur }}</p>
+    <p class="hint">Lo gastado de la nómina. No cuenta lo pagado desde un sobre.</p>
+  </div>
+  <div class="card stat">
+    <p class="label">Aportado a sobres</p>
+    <p class="stat-num num">{{ m.saved|eur }}</p>
+    <p class="hint">{% if m.saved_ratio is not none %}Has guardado el {{ m.saved_ratio|pct }} de lo que has cobrado.{% else %}Lo que has guardado este mes.{% endif %}</p>
+  </div>
+  <div class="card stat">
+    <p class="label">Pagado desde sobres</p>
+    <p class="stat-num num">{{ m.envelope_spent|eur }}</p>
+    <p class="hint">Solo informativo: no resta del libre porque ese dinero ya estaba guardado.</p>
+  </div>
+</section>
+
+{% if sweep %}
+<section class="card sweep">
+  <p class="label">Sobras de {{ month_name(sweep.year, sweep.month) }}</p>
+  <p class="stat-num num">{{ sweep.amount|eur }}</p>
+  <p class="hint">Es lo que te sobró ese mes: lo cobrado menos los gastos y lo que ya guardaste.
+    {% if sweep.enabled %}Se guardará solo en «{{ sweep.envelope.name }}» el día {{ sweep.day }} de cada mes.
+    {% else %}Guardarlo solo está desactivado (se activa en Ajustes → Sobras del mes).{% endif %}</p>
+  <form method="post" action="/sobras">
+    <button class="btn btn-primary btn-block" type="submit">Guardar en «{{ sweep.envelope.name }}» ahora</button>
+  </form>
+  <p class="hint">Recuerda hacer luego la transferencia de verdad a {{ envelope_account }}: la app apunta el dinero,
+    pero no lo mueve. Hasta que la hagas, el cuadre te avisará.</p>
+</section>
+{% endif %}
+
+{% if budget.alerts %}
+<section class="card">
+  <h2>Presupuesto</h2>
+  <ul class="plain">
+    {% for a in budget.alerts %}
+    <li class="level-{{ a.line.level }}">{{ icono_nivel(a.line.level) }} <strong>{{ a.cat.name }}</strong>:
+      {{ a.line.spent|eur }} de {{ a.line.budget|eur }} ({{ a.line.ratio|pct }})</li>
+    {% endfor %}
+  </ul>
+  <a class="more" href="/presupuesto?mes={{ month_key(year, month) }}">Ver presupuesto ›</a>
+</section>
+{% endif %}
+
+</div>
+
+<div class="col col-b">
+<section class="section-head">
+  <h2>Sobres</h2>
+  <a class="more" href="/sobres">Ver todos ›</a>
+</section>
+<div class="card total-card">
+  <p class="label">Total en sobres</p>
+  <p class="stat-num num">{{ total_envelopes|eur }}</p>
+  <p class="hint">Todo el dinero que tienes apartado en tus sobres (en {{ envelope_account }}).</p>
+</div>
+<div class="env-grid">
+  {% for c in cards %}{{ envelope_card(c) }}{% endfor %}
+</div>
+
+<section class="stats two">
+  <a class="card stat {{ 'level-pasado' if debts.ratio is not none and debts.ratio > debts.limit }}" href="/deudas">
+    <p class="label">Cuotas / nómina</p>
+    <p class="stat-num num">{{ debts.ratio|pct1 }}</p>
+    <p class="hint">Parte de tu nómina que se va en cuotas de préstamos. Te avisa por encima del {{ debts.limit|pct }}.</p>
+  </a>
+  <a class="card stat cuadre-mini level-{{ cuadre.r.level if cuadre else 'sin' }}" href="/sobres#cuadre">
+    <p class="label">Cuadre con {{ envelope_account }}</p>
+    {% if cuadre %}
+    <p class="stat-msg">{{ icono_nivel(cuadre.r.level) }} {{ cuadre.r.message }}</p>
+    <p class="hint">Comparado con el saldo que escribiste el {{ cuadre.check.date|fecha }}.</p>
+    {% else %}
+    <p class="stat-msg">Sin comprobar</p>
+    <p class="hint">Escribe el saldo de {{ envelope_account }} en Sobres.</p>
+    {% endif %}
+  </a>
+</section>
+</div>
+{% endblock %}

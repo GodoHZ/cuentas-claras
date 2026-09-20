@@ -1,0 +1,73 @@
+{% from "_iconos.html" import icono, icono_nivel %}
+{% macro envelope_card(c, link=True) %}
+{% set e, st = c.env, c.st %}
+<{{ 'a' if link else 'div' }} class="card env-card{{ ' done' if st.done }}" {% if link %}href="/sobres/{{ e.id }}"{% endif %}>
+  <div class="env-top">
+    <span class="env-name">{{ e.name }}{% if not e.active %} <span class="badge">archivado</span>{% endif %}</span>
+    <span class="env-balance num">{{ st.balance|eur }}</span>
+  </div>
+  {% if st.target %}
+  <div class="bar bar-env" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ (st.progress * 100)|round|int }}"
+       aria-label="Progreso de {{ e.name }}"><span style="width: {{ (st.progress * 100)|round(1) }}%"></span></div>
+  <p class="env-meta">
+    <span>{{ st.progress|pct }} de {{ st.target|eur }}</span>
+    <span class="env-label{{ ' ok' if st.done }}">{% if st.done %}{{ icono("check") }} {% endif %}{{ st.label }}{% if st.months %} para llegar{% endif %}</span>
+  </p>
+  {% if st.missing %}<p class="hint">Te faltan {{ st.missing|eur }}{% if st.monthly %} · guardas {{ st.monthly|eur }} al mes{% endif %}</p>{% endif %}
+  {% else %}
+  <p class="env-meta"><span class="muted">{{ st.label }}</span>{% if st.monthly %}<span>Guardas {{ st.monthly|eur }} al mes</span>{% endif %}</p>
+  {% endif %}
+</{{ 'a' if link else 'div' }}>
+{% endmacro %}
+
+{% macro month_nav(base, year, month, extra="") %}
+{% set py, pm = add_months(year, month, -1) %}{% set ny, nm = add_months(year, month, 1) %}
+<div class="month-nav">
+  <a href="{{ base }}?mes={{ month_key(py, pm) }}{{ extra }}" aria-label="Mes anterior">‹</a>
+  <strong>{{ month_name(year, month, True) }}</strong>
+  <a href="{{ base }}?mes={{ month_key(ny, nm) }}{{ extra }}" aria-label="Mes siguiente">›</a>
+</div>
+{% endmacro %}
+
+{% macro tx_row(r) %}
+<a class="tx tx-{{ r.type }}" href="/movimientos/{{ r.id }}">
+  <span class="tx-dot" aria-hidden="true"></span>
+  <span class="tx-main">
+    <span class="tx-title">{{ r.concept or r.category or r.envelope }}</span>
+    <span class="tx-sub">
+      {%- if r.type == 'aporte_sobre' %}Aporte a «{{ r.envelope }}»
+      {%- elif r.type == 'retiro_sobre' %}Retiro de «{{ r.envelope }}»
+      {%- else %}{{ r.category }}{% if r.envelope %} · desde «{{ r.envelope }}»{% endif %}{% endif %} · {{ r.account }}
+    </span>
+  </span>
+  <span class="tx-amount num">
+    {%- if r.type == 'ingreso' %}{{ r.amount|eur_sign }}
+    {%- elif r.type == 'gasto' %}{{ (0 - r.amount)|eur }}
+    {%- else %}{{ r.amount|eur }}{% endif -%}
+    <small>{{ TYPES[r.type] }}</small>
+  </span>
+</a>
+{% endmacro %}
+
+{% macro budget_bar(line, name) %}
+<div class="budget-line level-{{ line.level }}">
+  <div class="budget-top">
+    <span class="budget-name">{{ name }}</span>
+    <span class="budget-pct">
+      {%- if line.level == 'pasado' %}{{ icono_nivel('pasado') }} Te has pasado · {{ line.ratio|pct }}
+      {%- elif line.level == 'aviso' %}{{ icono_nivel('aviso') }} Cerca del límite · {{ line.ratio|pct }}
+      {%- elif line.level == 'ok' %}{{ line.ratio|pct }}
+      {%- else %}Sin presupuesto{% endif -%}
+    </span>
+  </div>
+  {% if line.ratio is not none %}
+  <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ [line.ratio * 100, 100]|min|round|int }}" aria-label="{{ name }}">
+    <span style="width: {{ [line.ratio * 100, 100]|min|round(1) }}%"></span>
+  </div>
+  <p class="hint">Gastado {{ line.spent|eur }} de {{ line.budget|eur }} ·
+    {% if line.left >= 0 %}quedan {{ line.left|eur }}{% else %}te has pasado {{ (0 - line.left)|eur }}{% endif %}</p>
+  {% else %}
+  <p class="hint">Gastado {{ line.spent|eur }} (no tiene presupuesto mensual)</p>
+  {% endif %}
+</div>
+{% endmacro %}

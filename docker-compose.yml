@@ -1,0 +1,27 @@
+# Finanzas — despliegue con Docker.
+#
+# La imagen se construye a mano (no está en ningún registro):
+#     docker build -t finanzas-app:1.7.0 --build-arg VERSION=1.7.0 .
+#     docker compose up -d
+#
+# Escucha solo en 127.0.0.1: pensado para publicarlo detrás de un proxy inverso
+# con HTTPS (Nginx Proxy Manager, Caddy, Traefik...) o de una VPN como Tailscale.
+# La app no tiene cuentas de usuario: es para una sola persona. Tiene un PIN
+# opcional en Ajustes.
+services:
+  finanzas:
+    image: finanzas-app:1.7.0
+    container_name: finanzas
+    restart: unless-stopped
+    user: "1000:1000"              # el dueño de ./data y ./backups
+    ports:
+      - "127.0.0.1:8095:8000"
+    environment:
+      - TZ=Europe/Madrid
+      # Si las copias van a otro disco, el nombre de un fichero que solo exista
+      # ahí: la app se niega a escribir si no lo encuentra (por si no está montado).
+      # - BACKUP_SENTINEL=.esta-en-el-disco-de-copias
+    volumes:
+      - ./data:/app/data           # la base de datos
+      - ./backups:/app/backups     # las copias diarias
+    mem_limit: 256m

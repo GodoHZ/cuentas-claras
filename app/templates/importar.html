@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Importar CSV · Finanzas{% endblock %}
+{% block heading %}Importar movimientos{% endblock %}
+{% set back = "/ajustes?abierto=exportar#exportar" %}
+{% from "_iconos.html" import icono %}
+{% block main %}
+{% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+
+{% if not preview %}
+<div class="card stack">
+  <p>Sube el CSV de la pestaña <strong>Movimientos</strong> de tu hoja de Google.</p>
+  <p class="hint">Columnas: Fecha, Tipo, Categoría, Sobre, Cuenta, Concepto, Importe (€). Vale el formato español
+    («1.234,56 €», fechas 19/09/2026). Se saltan las filas sin importe y las que ponen «(ejemplo)»,
+    y lo que ya esté apuntado no se duplica. Antes de guardar nada verás una vista previa.</p>
+  <form method="post" action="/ajustes/importar" enctype="multipart/form-data" hx-boost="false" class="stack">
+    <input type="file" name="archivo" accept=".csv,text/csv,text/plain" required>
+    <button class="btn btn-primary" type="submit">Ver vista previa</button>
+  </form>
+</div>
+
+{% elif preview.error %}
+<div class="alert alert-error" role="alert">{{ preview.error }}</div>
+<p><a class="btn" href="/ajustes/importar">Probar con otro archivo</a></p>
+
+{% else %}
+<div class="card">
+  <h2>Vista previa{% if filename %} de {{ filename }}{% endif %}</h2>
+  <ul class="plain summary-list">
+    <li class="ok"><strong>{{ preview.count('ok') }}</strong> se van a importar</li>
+    {% if preview.count('falta') %}<li class="warn"><strong>{{ preview.count('falta') }}</strong> usan categorías, sobres o cuentas que no existen</li>{% endif %}
+    {% if preview.count('duplicada') %}<li><strong>{{ preview.count('duplicada') }}</strong> ya están en la app (no se duplican)</li>{% endif %}
+    {% if preview.count('ignorada') %}<li><strong>{{ preview.count('ignorada') }}</strong> se ignoran (sin importe o de ejemplo)</li>{% endif %}
+    {% if preview.count('error') %}<li class="bad"><strong>{{ preview.count('error') }}</strong> tienen algún error y no se importan</li>{% endif %}
+  </ul>
+
+  {% if preview.has_missing %}
+  <div class="alert alert-warn">
+    <p><strong>No existen todavía:</strong></p>
+    {% if preview.missing_categories %}<p>Categorías: {{ preview.missing_categories|sort|join(', ') }}</p>{% endif %}
+    {% if preview.missing_envelopes %}<p>Sobres: {{ preview.missing_envelopes|sort|join(', ') }}</p>{% endif %}
+    {% if preview.missing_accounts %}<p>Cuentas: {{ preview.missing_accounts|sort|join(', ') }}</p>{% endif %}
+  </div>
+  {% endif %}
+
+  <form method="post" action="/ajustes/importar/confirmar" hx-boost="false" class="stack">
+    <input type="hidden" name="payload" value="{{ payload }}">
+    {% if preview.has_missing %}
+    <label class="check"><input type="checkbox" name="crear" value="1" checked>
+      Crear lo que falta e importar también esas filas</label>
+    {% endif %}
+    <button class="btn btn-primary" type="submit">Importar</button>
+    <a class="btn" href="/ajustes/importar">Cancelar</a>
+  </form>
+</div>
+
+<div class="card">
+  <div class="table-scroll">
+    <table class="data small">
+      <thead><tr><th>#</th><th>Fecha</th><th>Tipo</th><th>Concepto</th><th>Importe</th><th>Estado</th></tr></thead>
+      <tbody>
+        {% for r in preview.rows %}
+        <tr class="imp-{{ r.status }}">
+          <td>{{ r.line }}</td>
+          <td>{{ r.date|fecha if r.date else r.raw.get('date', '') }}</td>
+          <td>{{ TYPES.get(r.type, r.raw.get('type', '')) }}</td>
+          <td>{{ r.concept or r.category or r.envelope }}</td>
+          <td class="num">{{ r.amount|eur if r.amount is not none else r.raw.get('amount', '') }}</td>
+          <td>{% if r.status == 'ok' %}{{ icono('ok', 'ico-ok') }} Se importa{% else %}{{ r.reason }}{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

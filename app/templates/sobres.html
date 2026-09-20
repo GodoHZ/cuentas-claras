@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% from "_macros.html" import envelope_card %}
+{% block title %}Sobres · Finanzas{% endblock %}
+{% block heading %}Sobres{% endblock %}
+{% block main %}
+<div class="card total-card">
+  <p class="label">Total en sobres</p>
+  <p class="hero-num num">{{ total_envelopes|eur }}</p>
+  <p class="hint">Todo el dinero que tienes apartado en tus sobres. Debería coincidir con tu saldo de {{ envelope_account }}
+    (lo compruebas abajo, en «Cuadre»).</p>
+</div>
+
+<div class="env-grid">
+  {% for c in cards %}{{ envelope_card(c) }}{% endfor %}
+</div>
+{% if archived %}
+<h2 class="section-title">Archivados con saldo</h2>
+<div class="env-grid">{% for c in archived %}{{ envelope_card(c) }}{% endfor %}</div>
+{% endif %}
+<p class="muted small">Para crear, renombrar, archivar u ordenar sobres: <a href="/ajustes?abierto=sobres#sobres">Ajustes › Sobres</a>.</p>
+
+{% include "partials/cuadre.html" %}
+{% endblock %}

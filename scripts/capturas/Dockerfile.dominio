@@ -1,0 +1,7 @@
+FROM mcr.microsoft.com/playwright/python:v1.63.0-noble AS shots
+RUN pip install --break-system-packages --no-cache-dir playwright==1.63.0
+COPY scripts/capturas/dominio.py /w/
+# el contenedor de build no usa el DNS de AdGuard: se apunta a mano
+RUN mkdir /out && python /w/dominio.py
+FROM scratch AS export
+COPY --from=shots /out /
