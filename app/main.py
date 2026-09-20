@@ -170,7 +170,13 @@ def backup_keep_days(path: Path) -> int:
 
 
 def prepare_database(path: Path) -> None:
-    db.init_db(path)
+    try:
+        db.init_db(path)
+    except OSError as e:
+        log.error("No puedo escribir en %s (%s). Si es la primera vez, crea las carpetas antes de "
+                  "levantar el contenedor para que sean tuyas y no de root:  mkdir -p data backups",
+                  path.parent, e)
+        raise
     conn = db.connect(path)
     try:
         result = seed.seed(conn)

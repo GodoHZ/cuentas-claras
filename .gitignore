@@ -1,5 +1,7 @@
-data/
-backups/
+data/*
+!data/.gitkeep
+backups/*
+!backups/.gitkeep
 *.db
 docker-compose.local.yml
 DESPLIEGUE-NAS.md

@@ -1,0 +1,17 @@
+# Los tests se ejecutan dentro del propio docker build: si falla una regla de
+# cálculo, la imagen no llega a construirse. Aquí se repite en cada push para
+# comprobarlo también fuera de la máquina de quien lo escribe.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construir la imagen y pasar los tests
+        run: docker build --target test -t finanzas-test .

@@ -1,5 +1,7 @@
 # Finanzas
 
+[![tests](https://github.com/GodoHZ/cuentas-claras/actions/workflows/tests.yml/badge.svg)](https://github.com/GodoHZ/cuentas-claras/actions/workflows/tests.yml)
+
 App web de finanzas personales **para una sola persona**, pensada primero para el
 móvil y para tenerla en casa: un contenedor, una base de datos SQLite y ninguna
 cuenta en la nube. Sustituye a la típica hoja de cálculo de gastos.
@@ -53,10 +55,27 @@ Y ya está en `http://127.0.0.1:8095`. Al arrancar con la base de datos vacía c
 un esqueleto de categorías, sobres y dos cuentas, **sin ningún movimiento**;
 todo eso se cambia desde Ajustes.
 
-Escucha solo en `127.0.0.1` a propósito: la idea es publicarla detrás de un proxy
-inverso con HTTPS (Nginx Proxy Manager, Caddy, Traefik…) o de una VPN tipo
-Tailscale. **No tiene cuentas de usuario**, porque es de un solo usuario; en
-Ajustes hay un PIN opcional de 4 a 8 cifras.
+Las carpetas `data/` y `backups/` vienen en el repositorio (vacías) para que sean
+tuyas y no de root. El contenedor corre como el usuario `1000:1000`; si el tuyo
+es otro, cambia esa línea del `docker-compose.yml` por lo que diga `id -u`.
+
+## Hasta dónde llega la seguridad
+
+Conviene decirlo claro antes de que la pongas en marcha:
+
+- **No la expongas a internet.** Escucha solo en `127.0.0.1` a propósito. La idea
+  es llegar a ella por una VPN (Tailscale, WireGuard) o, como mucho, por un proxy
+  inverso con HTTPS dentro de tu red (Nginx Proxy Manager, Caddy, Traefik…).
+- **No tiene cuentas de usuario**: es para una persona. Cualquiera que llegue a la
+  dirección entra, salvo que actives el PIN.
+- **El PIN es una barrera ligera**, no una cerradura: 4 a 8 cifras, guardado con
+  PBKDF2 y con un bloqueo de 5 minutos tras 5 intentos. Sirve para que nadie
+  cotillee si le dejas el móvil desbloqueado; no para aguantar a alguien decidido.
+- **La base de datos no está cifrada.** Quien tenga acceso al fichero, tiene tus
+  números. Cífralo desde abajo (disco, LUKS...) si te preocupa.
+- **Las copias en el móvil** (Ajustes → Sin conexión) se pueden leer sin el PIN,
+  porque sin red no hay servidor que lo compruebe. Por eso, con PIN, vienen
+  apagadas y la propia app te avisa al activarlas.
 
 Variables del contenedor:
 
@@ -108,6 +127,16 @@ scripts/       iconos, despliegue en Portainer, capturas con WebKit
 
 Los **tests se ejecutan durante `docker build`**: si falla una regla de cálculo,
 no llega a generarse la imagen.
+
+Si vas a tocar el código en tu propia copia, hay un hook que impide commitear
+datos privados (rutas, dominios, `.db`, ficheros de configuración local):
+
+```bash
+git config core.hooksPath scripts/git-hooks
+```
+
+La lista de cosas a vigilar se lee de `~/.config/finanzas/patrones-privados.txt`
+(una expresión por línea) y no está en el repositorio, por razones obvias.
 
 ```bash
 docker build --target test -t finanzas-test .        # solo los tests

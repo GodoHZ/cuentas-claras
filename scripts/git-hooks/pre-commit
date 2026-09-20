@@ -1,0 +1,39 @@
+#!/bin/sh
+# Evita que se cuelen datos privados en un repositorio público.
+#
+# La lista de cosas a vigilar NO está aquí (sería publicarla): se lee de
+# ~/.config/finanzas/patrones-privados.txt, una expresión por línea.
+# Para activarlo:   git config core.hooksPath scripts/git-hooks
+# Para saltártelo:  git commit --no-verify
+PATRONES="${FINANZAS_PATRONES:-$HOME/.config/finanzas/patrones-privados.txt}"
+
+# Ficheros que no deberían entrar nunca, haya lista o no
+PROHIBIDOS='\.db$|\.db-wal$|\.db-shm$|(^|/)\.env$|docker-compose\.local\.yml$|DESPLIEGUE.*\.md$'
+COLADOS=$(git diff --cached --name-only --diff-filter=A | grep -E "$PROHIBIDOS")
+if [ -n "$COLADOS" ]; then
+  echo "pre-commit: estos ficheros no deberían subirse:"
+  echo "$COLADOS" | sed 's/^/  /'
+  echo "Quítalos con 'git restore --staged <fichero>' (o usa --no-verify si sabes lo que haces)."
+  exit 1
+fi
+
+[ -f "$PATRONES" ] || exit 0
+
+ENCONTRADO=0
+while IFS= read -r patron; do
+  case "$patron" in ''|\#*) continue ;; esac
+  # ojo: '+' literal sin escapar, que algunos grep (ugrep) no admiten '\+'
+  LINEAS=$(git diff --cached -U0 | grep '^+' | grep -v '^+++' | grep -inE "$patron")
+  if [ -n "$LINEAS" ]; then
+    [ "$ENCONTRADO" -eq 0 ] && echo "pre-commit: hay datos privados en lo que vas a commitear:"
+    ENCONTRADO=1
+    echo "  [$patron]"
+    echo "$LINEAS" | head -3 | sed 's/^/    /'
+  fi
+done < "$PATRONES"
+
+if [ "$ENCONTRADO" -eq 1 ]; then
+  echo "Repásalo. Si es un falso positivo: git commit --no-verify"
+  exit 1
+fi
+exit 0
