@@ -38,7 +38,7 @@ Todo está en castellano, en euros y con fechas dd/mm/aaaa.
 ## Puesta en marcha
 
 ```bash
-git clone <este repositorio> finanzas && cd finanzas
+git clone https://github.com/GodoHZ/cuentas-claras.git && cd cuentas-claras
 docker build -t finanzas-app:1.7.0 --build-arg VERSION=1.7.0 .
 docker compose up -d
 ```
