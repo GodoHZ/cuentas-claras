@@ -1,7 +1,7 @@
 # Finanzas — despliegue con Docker.
 #
 # La imagen se construye a mano (no está en ningún registro):
-#     docker build -t finanzas-app:1.9.0 --build-arg VERSION=1.9.0 .
+#     docker build -t finanzas-app:2.0.0 --build-arg VERSION=2.0.0 .
 #     docker compose up -d
 #
 # Escucha solo en 127.0.0.1: pensado para publicarlo detrás de un proxy inverso
@@ -10,7 +10,7 @@
 # opcional en Ajustes.
 services:
   finanzas:
-    image: finanzas-app:1.9.0
+    image: finanzas-app:2.0.0
     container_name: finanzas
     restart: unless-stopped
     user: "1000:1000"              # el dueño de ./data y ./backups

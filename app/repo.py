@@ -134,24 +134,27 @@ def move(conn, table: str, row_id: int, direction: int) -> None:
 def all_txs(conn) -> list[calc.Tx]:
     """Todos los movimientos, en el formato que usan las reglas de calc.py."""
     return [
-        calc.Tx(date.fromisoformat(r["date"]), r["type"], r["amount"], r["category_id"], r["envelope_id"])
-        for r in conn.execute(
-            "SELECT date, type, amount, category_id, envelope_id FROM transactions ORDER BY date, id")
+        calc.Tx(date.fromisoformat(r["date"]), r["type"], r["amount"], r["category_id"],
+                r["envelope_id"], r["account_id"], r["other_account_id"])
+        for r in conn.execute("SELECT date, type, amount, category_id, envelope_id, account_id, "
+                              "other_account_id FROM transactions ORDER BY date, id")
     ]
 
 
 TX_SELECT = """
-SELECT t.*, c.name AS category, e.name AS envelope, a.name AS account
+SELECT t.*, c.name AS category, e.name AS envelope, a.name AS account, o.name AS other_account
 FROM transactions t
 LEFT JOIN categories c ON c.id = t.category_id
 LEFT JOIN envelopes e ON e.id = t.envelope_id
 LEFT JOIN accounts a ON a.id = t.account_id
+LEFT JOIN accounts o ON o.id = t.other_account_id
 """
 
 
 def tx_rows(conn, month: tuple[int, int] | None = None, type_: str | None = None,
             category_id: int | None = None, envelope_id: int | None = None,
-            limit: int | None = None, oldest_first: bool = False) -> list[sqlite3.Row]:
+            account_id: int | None = None, limit: int | None = None,
+            oldest_first: bool = False) -> list[sqlite3.Row]:
     sql, args = TX_SELECT + " WHERE 1=1", []
     if month:
         sql += " AND substr(t.date, 1, 7) = ?"
@@ -165,6 +168,9 @@ def tx_rows(conn, month: tuple[int, int] | None = None, type_: str | None = None
     if envelope_id:
         sql += " AND t.envelope_id = ?"
         args.append(envelope_id)
+    if account_id:
+        sql += " AND (t.account_id = ? OR t.other_account_id = ?)"
+        args += [account_id, account_id]
     sql += " ORDER BY t.date, t.id" if oldest_first else " ORDER BY t.date DESC, t.id DESC"
     if limit:
         sql += f" LIMIT {int(limit)}"
@@ -175,7 +181,8 @@ def get_tx(conn, tx_id: int) -> sqlite3.Row | None:
     return conn.execute(TX_SELECT + " WHERE t.id = ?", (tx_id,)).fetchone()
 
 
-TX_FIELDS = ("date", "type", "category_id", "envelope_id", "account_id", "concept", "amount")
+TX_FIELDS = ("date", "type", "category_id", "envelope_id", "account_id", "other_account_id",
+             "concept", "amount")
 TX_INSERT_FIELDS = TX_FIELDS + ("client_uid",)
 
 
@@ -217,20 +224,20 @@ def usage_counts(conn) -> tuple[dict[int, int], dict[int, int]]:
 
 # ---------------------------------------------------------------- cuadre
 
-def last_check(conn) -> sqlite3.Row | None:
-    return conn.execute("SELECT * FROM tr_checks ORDER BY date DESC, id DESC LIMIT 1").fetchone()
+def last_check(conn, account_id: int) -> sqlite3.Row | None:
+    return conn.execute("SELECT * FROM account_checks WHERE account_id = ? "
+                        "ORDER BY date DESC, id DESC LIMIT 1", (account_id,)).fetchone()
 
 
-def checks(conn, limit: int = 6) -> list[sqlite3.Row]:
-    return conn.execute("SELECT * FROM tr_checks ORDER BY date DESC, id DESC LIMIT ?", (limit,)).fetchall()
+def checks(conn, account_id: int | None = None, limit: int = 6) -> list[sqlite3.Row]:
+    sql = "SELECT k.*, a.name AS account FROM account_checks k LEFT JOIN accounts a ON a.id = k.account_id"
+    args: list = []
+    if account_id:
+        sql += " WHERE k.account_id = ?"
+        args.append(account_id)
+    return conn.execute(sql + " ORDER BY k.date DESC, k.id DESC LIMIT ?", args + [limit]).fetchall()
 
 
-def add_check(conn, day: date, balance: int) -> None:
-    conn.execute("INSERT INTO tr_checks (date, balance) VALUES (?, ?)", (day.isoformat(), balance))
-
-
-def envelope_moves_after(conn, day: str) -> int:
-    """Movimientos de sobres con fecha posterior al último cuadre."""
-    return conn.execute(
-        "SELECT COUNT(*) FROM transactions WHERE envelope_id IS NOT NULL AND date > ? "
-        "AND type IN ('aporte_sobre', 'retiro_sobre', 'gasto')", (day,)).fetchone()[0]
+def add_check(conn, account_id: int, day: date, balance: int) -> None:
+    conn.execute("INSERT INTO account_checks (account_id, date, balance) VALUES (?, ?, ?)",
+                 (account_id, day.isoformat(), balance))

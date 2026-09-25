@@ -4,7 +4,7 @@ from playwright.sync_api import sync_playwright
 BASE = "http://127.0.0.1:8000"
 PAGINAS = [("panel", "/"), ("movimientos", "/movimientos"), ("sobres", "/sobres"),
            ("presupuesto", "/presupuesto"), ("resumen", "/resumen"), ("deudas", "/deudas"),
-           ("ajustes", "/ajustes"), ("mas", "/mas"), ("nuevo", "/nuevo"), ("sobre", "/sobres/2"), ("ajustes-sobras", "/ajustes?abierto=sobras")]
+           ("ajustes", "/ajustes"), ("mas", "/mas"), ("nuevo", "/nuevo"), ("sobre", "/sobres/2"), ("cuentas", "/cuentas"), ("cuenta", "/cuentas/2")]
 
 with sync_playwright() as p:
     nav = p.webkit.launch()
@@ -80,12 +80,18 @@ with sync_playwright() as p:
     # así que se mira la lista, no la página entera
     if pag.locator('.tx:has-text("12,34")').count():
         fallos.append("el movimiento no se ha borrado")
-    # cuadre
-    pag.goto(BASE + "/sobres", wait_until="networkidle")
-    pag.fill("#saldo-tr", "3.400,00")
+    # cuadre de una cuenta
+    pag.goto(BASE + "/cuentas", wait_until="networkidle")
+    fallos.append("saldos de las cuentas: " + " · ".join(
+        t.strip().replace("\n", " ") for t in pag.locator(".cuenta-card .env-top").all_inner_texts()))
+    pag.click(".cuenta-card >> nth=1")
+    pag.wait_for_timeout(800)
+    pag.fill("#saldo-real", "700,00")
     pag.click('.cuadre-form button[type="submit"]')
-    pag.wait_for_timeout(900)
-    if "sin apuntar" not in pag.content():
-        fallos.append("el cuadre no ha respondido")
+    pag.wait_for_timeout(1200)
+    if "menos" not in pag.content() and "más" not in pag.content() and "Cuadra" not in pag.content():
+        fallos.append("el cuadre de la cuenta no ha respondido")
+    pag.screenshot(path="/out/cuenta-cuadre.png", full_page=True)
+
     open("/out/interaccion.txt", "w").write("\n".join(fallos) or "interacción: todo correcto")
     nav.close()

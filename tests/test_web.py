@@ -23,14 +23,12 @@ def test_panel_ensena_las_cifras(client, db_path):
     apuntar(conn, "2026-09-01", calc.INGRESO, 150000, categoria="Nómina")
     apuntar(conn, "2026-09-02", calc.GASTO, 50000, categoria="Casa")
     apuntar(conn, "2026-09-03", calc.APORTE, 30000, sobre="Colchón", cuenta="Cuenta de ahorro")
-    with conn:
-        repo.add_check(conn, date(2026, 9, 19), 30000)
     conn.close()
     html = get(client, "/").text
     assert "Libre" in html
     assert "700,00 €" in html          # 1.500 − 500 − 300
-    assert "300,00 €" in html          # total en sobres
-    assert "Todo apuntado" in html                 # el cuadre coincide
+    assert "300,00 €" in html          # total en sobres y saldo de la cuenta de ahorro
+    assert "Cuentas" in html
 
 
 def test_sobres_y_detalle(client, db_path):
@@ -110,15 +108,34 @@ def test_apuntar_desde_la_hoja_del_boton_mas(client, db_path):
     assert '<form id="txform-qa"' in r.text          # vuelve el formulario en blanco
 
 
-def test_cuadre(client, db_path):
+def test_cuentas_y_cuadre(client, db_path):
     conn = db.connect(db_path)
-    apuntar(conn, "2026-09-02", calc.APORTE, 30000, sobre="Colchón", cuenta="Cuenta de ahorro")
+    cats, envs, accs = ids(conn)
+    corriente, ahorro = accs["Cuenta corriente"], accs["Cuenta de ahorro"]
+    with conn:                                       # 1.000 € de saldo inicial en la corriente
+        conn.execute("UPDATE accounts SET initial_balance = 100000 WHERE id = ?", (corriente,))
+    apuntar(conn, "2026-09-02", calc.INGRESO, 150000, categoria="Nómina")
     conn.close()
-    r = client.post("/cuadre", headers={"HX-Request": "true"}, data={"saldo": "301,50", "fecha": "2026-09-20"})
-    assert r.status_code == 200
-    assert "intereses" in r.text                     # 1,50 € de más
-    r = client.post("/cuadre", headers={"HX-Request": "true"}, data={"saldo": "tres mil"})
+
+    html = get(client, "/cuentas").text
+    assert "2.500,00 €" in html                  # 1.000 iniciales + 1.500 de nómina
+
+    # un traspaso mueve dinero de una cuenta a otra, sin ser gasto ni ingreso
+    client.post("/movimientos/nuevo", data={
+        "tipo": "traspaso", "importe": "200", "cuenta_id": ahorro, "otra_cuenta_id": corriente,
+        "fecha": "2026-09-03", "concepto": "Para el ahorro"})
+    detalle = get(client, f"/cuentas/{ahorro}").text
+    assert "200,00 €" in detalle
+    conn = db.connect(db_path)
+    assert calc.month_summary(repo.all_txs(conn), 2026, 9).free == 150000   # el traspaso no toca el mes
+    conn.close()
+
+    # y el cuadre compara con lo que diga el banco
+    r = client.post(f"/cuentas/{ahorro}/comprobar", data={"saldo": "201,50"}, follow_redirects=True)
+    assert "intereses" in r.text                      # 1,50 € de más
+    r = client.post(f"/cuentas/{ahorro}/comprobar", data={"saldo": "tres mil"}, follow_redirects=True)
     assert "no es válido" in r.text
+
 
 
 def test_presupuesto_y_resumen(client, db_path):
@@ -320,7 +337,7 @@ def test_empezar_de_cero(client, db_path, tmp_path):
     r = client.post("/ajustes/empezar-de-cero", data={"alcance": "movimientos", "confirmacion": "borrar"},
                     follow_redirects=True)
     conn = db.connect(db_path)
-    assert repo.all_txs(conn) == [] and repo.last_check(conn) is None
+    assert repo.all_txs(conn) == [] and repo.checks(conn) == []
     assert len(repo.categories(conn)) == 14      # las categorías se quedan
     conn.close()
     assert list((tmp_path / "backups").glob("*-manual.db"))   # copia antes de borrar
@@ -337,14 +354,16 @@ def test_empezar_de_cero(client, db_path, tmp_path):
     get(client, "/nuevo")
 
 
-def test_nombre_de_la_cuenta_de_sobres_no_esta_fijo(client, db_path):
-    assert "Cuadre con Cuenta de ahorro" in get(client, "/").text
+def test_renombrar_una_cuenta_no_rompe_nada(client, db_path):
     conn = db.connect(db_path)
-    envelope_account = repo.int_setting(conn, "envelope_account_id")
+    accs = ids(conn)[2]
     conn.close()
-    client.post(f"/ajustes/lista/cuentas/{envelope_account}", data={"nombre": "MyInvestor"})
-    html = get(client, "/").text
-    assert "Cuadre con MyInvestor" in html and "Cuenta de ahorro" not in html
+    assert "Cuenta de ahorro" in get(client, "/cuentas").text
+    client.post(f"/ajustes/lista/cuentas/{accs['Cuenta de ahorro']}",
+                data={"nombre": "MyInvestor", "saldo_inicial": "50"})
+    html = get(client, "/cuentas").text
+    assert "MyInvestor" in html and "Cuenta de ahorro" not in html
+    assert "50,00 €" in html                     # el saldo inicial se guarda
 
 
 def test_archivar_y_borrar_desde_ajustes(client, db_path):
@@ -458,3 +477,33 @@ def test_se_puede_elegir_si_el_movil_guarda_copias(client, db_path):
     client.post("/ajustes/sin-conexion", data={})                 # y volver a quitar
     assert get(client, "/").headers.get("X-Sin-Copia") == "1"
     client.post("/ajustes/pin/quitar")
+
+
+def test_ajustar_el_saldo_inicial_para_que_cuadre(client, db_path):
+    """Al empezar: apuntas lo que dice el banco y la app deduce lo que había antes."""
+    conn = db.connect(db_path)
+    accs = ids(conn)[2]
+    corriente = accs["Cuenta corriente"]
+    apuntar(conn, "2026-09-02", calc.GASTO, 2500, categoria="Ocio")      # la app calcula −25 €
+    conn.close()
+
+    client.post(f"/cuentas/{corriente}/comprobar", data={"saldo": "975", "fecha": "2026-09-19"})
+    r = client.get(f"/cuentas/{corriente}")
+    assert "1.000,00 €" in r.text or "menos" in r.text               # hay diferencia
+
+    r = client.post(f"/cuentas/{corriente}/ajustar-inicial", follow_redirects=True)
+    assert "cuadra con el banco" in r.text
+    conn = db.connect(db_path)
+    assert repo.get_row(conn, "accounts", corriente)["initial_balance"] == 100000   # había 1.000 €
+    saldos = calc.account_balances(repo.all_txs(conn), repo.accounts(conn))
+    assert saldos[corriente] == 97500                                     # y ahora cuadra
+    conn.close()
+    assert "Cuadra con el banco" in client.get(f"/cuentas/{corriente}").text
+
+
+def test_ajustar_sin_comprobacion_previa_avisa(client, db_path):
+    conn = db.connect(db_path)
+    corriente = ids(conn)[2]["Cuenta corriente"]
+    conn.close()
+    r = client.post(f"/cuentas/{corriente}/ajustar-inicial", follow_redirects=True)
+    assert "Primero apunta el saldo" in r.text

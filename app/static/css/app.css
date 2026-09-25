@@ -259,6 +259,7 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
 .tx-gasto .tx-dot { background: var(--s2); }
 .tx-aporte_sobre .tx-dot { background: var(--s3); }
 .tx-retiro_sobre .tx-dot { background: var(--warn); }
+.tx-traspaso .tx-dot { background: var(--muted); }
 .tx-main { flex: 1; min-width: 0; }
 .tx-title { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tx-sub { display: block; font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -363,6 +364,8 @@ table.data.small { font-size: 12px; }
 .type b { font-size: 15px; }
 .type small { color: var(--muted); font-size: 12px; }
 .type input:checked + span { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+.type.type-traspaso { grid-column: span 2; }
+.type.type-traspaso span { min-height: 48px; flex-direction: row; align-items: baseline; gap: 8px; }
 .type input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -391,7 +394,8 @@ table.data.small { font-size: 12px; }
 .txform:has(input[name="tipo"][value="gasto"]:checked) [data-show~="gasto"],
 .txform:has(input[name="tipo"][value="ingreso"]:checked) [data-show~="ingreso"],
 .txform:has(input[name="tipo"][value="aporte_sobre"]:checked) [data-show~="aporte"],
-.txform:has(input[name="tipo"][value="retiro_sobre"]:checked) [data-show~="retiro"] { display: var(--show, block); }
+.txform:has(input[name="tipo"][value="retiro_sobre"]:checked) [data-show~="retiro"],
+.txform:has(input[name="tipo"][value="traspaso"]:checked) [data-show~="traspaso"] { display: var(--show, block); }
 .chip[data-show] { --show: inline-flex; }
 
 /* ---------------------------------------------------------- navegación */

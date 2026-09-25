@@ -29,6 +29,7 @@ def norm(text) -> str:
 HEADERS = {
     "fecha": "date", "tipo": "type", "categoria": "category", "sobre": "envelope",
     "cuenta": "account", "concepto": "concept", "importe": "amount", "importe eur": "amount",
+    "otra cuenta": "other_account", "desde": "other_account", "cuenta origen": "other_account",
 }
 
 
@@ -44,6 +45,7 @@ TYPE_ALIASES = {
     "aporte al sobre": calc.APORTE, "aporte": calc.APORTE,
     "retiro_sobre": calc.RETIRO, "retiro de sobre": calc.RETIRO, "retiro sobre": calc.RETIRO,
     "retiro del sobre": calc.RETIRO, "retiro": calc.RETIRO,
+    "traspaso": calc.TRASPASO, "traspaso entre cuentas": calc.TRASPASO, "transferencia": calc.TRASPASO,
 }
 
 
@@ -58,6 +60,7 @@ class ImportRow:
     category: str = ""
     envelope: str = ""
     account: str = ""
+    other_account: str = ""
     concept: str = ""
     amount: int | None = None
 
@@ -171,8 +174,11 @@ def parse(conn, text: str) -> Preview:
         else:
             row.account = envelope_acc if row.type in calc.NEEDS_ENVELOPE else default_acc
 
-        errors += calc.validate_tx(row.type or None, row.amount,
-                                   row.category or None, row.envelope or None)
+        if raw.get("other_account"):
+            match = accs.get(norm(raw["other_account"]))
+            row.other_account = match["name"] if match else raw["other_account"]
+        errors += calc.validate_tx(row.type or None, row.amount, row.category or None,
+                                   row.envelope or None, row.account or None, row.other_account or None)
         if not row.account:
             errors.append("Falta la cuenta")
         if errors:
@@ -188,6 +194,9 @@ def parse(conn, text: str) -> Preview:
         if row.account and norm(row.account) not in accs:
             missing.append(f"la cuenta «{row.account}» no existe")
             preview.missing_accounts.add(row.account)
+        if row.other_account and norm(row.other_account) not in accs:
+            missing.append(f"la cuenta «{row.other_account}» no existe")
+            preview.missing_accounts.add(row.other_account)
         if missing:
             reason = "; ".join(missing)
             row.status, row.reason = "falta", reason[0].upper() + reason[1:]
@@ -227,6 +236,8 @@ def apply(conn, preview: Preview, create_missing: bool = False) -> int:
             repo.insert_tx(conn, date=r.date, type=r.type,
                            category_id=cats.get(norm(r.category)) if r.category else None,
                            envelope_id=envs.get(norm(r.envelope)) if r.envelope else None,
-                           account_id=accs[norm(r.account)], concept=r.concept, amount=r.amount)
+                           account_id=accs[norm(r.account)],
+                           other_account_id=accs.get(norm(r.other_account)) if r.other_account else None,
+                           concept=r.concept, amount=r.amount)
             added += 1
     return added

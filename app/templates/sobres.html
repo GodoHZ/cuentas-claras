@@ -6,8 +6,8 @@
 <div class="card total-card">
   <p class="label">Total en sobres</p>
   <p class="hero-num num">{{ total_envelopes|eur }}</p>
-  <p class="hint">Todo el dinero que tienes apartado en tus sobres. Debería coincidir con tu saldo de {{ envelope_account }}
-    (lo compruebas abajo, en «Cuadre»).</p>
+  <p class="hint">Todo el dinero que tienes apartado en tus sobres. Cada sobre vive en una cuenta;
+    en <a href="/cuentas">Cuentas</a> ves cuánto de cada cuenta está apartado y cuánto te queda libre.</p>
 </div>
 
 <div class="env-grid">
@@ -19,5 +19,4 @@
 {% endif %}
 <p class="muted small">Para crear, renombrar, archivar u ordenar sobres: <a href="/ajustes?abierto=sobres#sobres">Ajustes › Sobres</a>.</p>
 
-{% include "partials/cuadre.html" %}
 {% endblock %}

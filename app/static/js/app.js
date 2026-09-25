@@ -26,12 +26,24 @@
       const none = form.querySelector('input[name="sobre_id"][value=""]');
       if (none && none.checked) none.checked = false;
     }
-    if (!form.dataset.cuentaTocada) {
-      const wanted = (type === 'aporte_sobre' || type === 'retiro_sobre')
-        ? form.dataset.cuentaSobres : form.dataset.cuentaGeneral;
-      const account = form.querySelector('input[name="cuenta_id"][value="' + wanted + '"]');
+    if (type === 'traspaso') {
+      const ninguna = form.querySelector('input[name="otra_cuenta_id"][value=""]');
+      if (ninguna && ninguna.checked) ninguna.checked = false;   // un traspaso sale de algún sitio
+    }
+    if (!form.dataset.cuentaTocada && (type === 'gasto' || type === 'ingreso')) {
+      const account = form.querySelector('input[name="cuenta_id"][value="' + form.dataset.cuentaGeneral + '"]');
       if (account) account.checked = true;
     }
+    cuentaDelSobre(form);
+  }
+
+  // El dinero de un sobre vive en su cuenta: al elegir sobre, la cuenta se pone sola.
+  function cuentaDelSobre(form) {
+    const sobre = form.querySelector('input[name="sobre_id"]:checked');
+    const cuenta = sobre && sobre.dataset.cuenta;
+    if (!cuenta) return;
+    const chip = form.querySelector('input[name="cuenta_id"][value="' + cuenta + '"]');
+    if (chip) chip.checked = true;
   }
 
   function openQuickAdd(options) {
@@ -85,6 +97,7 @@
     const form = event.target.form;
     if (!form || !form.classList.contains('txform')) return;
     if (event.target.name === 'tipo') onTypeChange(form);
+    if (event.target.name === 'sobre_id') cuentaDelSobre(form);
     if (event.target.name === 'cuenta_id') form.dataset.cuentaTocada = '1';
   });
 
@@ -384,6 +397,12 @@
   window.addEventListener('online', () => enviarPendientes(true));
   document.addEventListener('DOMContentLoaded', () => { pintarPendientes(); enviarPendientes(false); });
   document.body.addEventListener('htmx:afterSettle', pintarPendientes);
+
+  // Al navegar muy rápido, el navegador cancela la transición anterior y lanza
+  // un aviso que no significa nada. Se silencia solo ese.
+  window.addEventListener('unhandledrejection', (event) => {
+    if (String(event.reason || '').toLowerCase().indexOf('view transition') >= 0) event.preventDefault();
+  });
 
   // ------------------------------------------------ PWA
 

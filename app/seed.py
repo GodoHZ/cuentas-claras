@@ -82,16 +82,17 @@ def seed(conn, force: bool = False) -> dict:
                              (name, kind, budget, pos))
                 added["categorías"] += 1
 
-        for pos, (name, target, monthly, note) in enumerate(ENVELOPES):
-            if _id(conn, "envelopes", name) is None:
-                conn.execute("INSERT INTO envelopes (name, target, monthly, note, position) VALUES (?, ?, ?, ?, ?)",
-                             (name, target, monthly, note, pos))
-                added["sobres"] += 1
-
         for pos, name in enumerate(ACCOUNTS):
             if _id(conn, "accounts", name) is None:
                 conn.execute("INSERT INTO accounts (name, position) VALUES (?, ?)", (name, pos))
                 added["cuentas"] += 1
+
+        cuenta_ahorro = _id(conn, "accounts", ACCOUNTS[-1])
+        for pos, (name, target, monthly, note) in enumerate(ENVELOPES):
+            if _id(conn, "envelopes", name) is None:
+                conn.execute("INSERT INTO envelopes (name, target, monthly, note, account_id, position) "
+                             "VALUES (?, ?, ?, ?, ?, ?)", (name, target, monthly, note, cuenta_ahorro, pos))
+                added["sobres"] += 1
 
         for pos, (name, installment, first, count) in enumerate(LOANS):
             if _id(conn, "loans", name) is None:
@@ -123,8 +124,9 @@ def seed(conn, force: bool = False) -> dict:
                 added["movimientos"] += 1
 
         for day, balance in TR_CHECKS:
-            if not conn.execute("SELECT 1 FROM tr_checks WHERE date = ? AND balance = ?", (day, balance)).fetchone():
-                conn.execute("INSERT INTO tr_checks (date, balance) VALUES (?, ?)", (day, balance))
+            if not conn.execute("SELECT 1 FROM account_checks WHERE date = ? AND balance = ?",
+                                (day, balance)).fetchone():
+                conn.execute("INSERT INTO account_checks (date, balance) VALUES (?, ?)", (day, balance))
                 added["cuadres"] += 1
 
         repo.set_setting(conn, "seed_version", SEED_VERSION)

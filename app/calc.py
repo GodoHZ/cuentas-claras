@@ -15,14 +15,17 @@ INGRESO = "ingreso"
 GASTO = "gasto"
 APORTE = "aporte_sobre"
 RETIRO = "retiro_sobre"
+TRASPASO = "traspaso"
 TYPES = {
     GASTO: "Gasto",
     INGRESO: "Ingreso",
     APORTE: "Aporte a sobre",
     RETIRO: "Retiro de sobre",
+    TRASPASO: "Traspaso entre cuentas",
 }
 NEEDS_ENVELOPE = (APORTE, RETIRO)
 NEEDS_CATEGORY = (INGRESO, GASTO)
+MOVE_MONEY = (APORTE, RETIRO, TRASPASO)        # los que pueden cambiar el dinero de cuenta
 
 # Valores de fábrica; todos se pueden cambiar en Ajustes → Reglas y avisos.
 INSTALLMENTS_LIMIT = 0.35          # cuotas / nómina: en rojo por encima
@@ -37,10 +40,13 @@ class Tx:
     amount: int                    # céntimos, siempre > 0
     category_id: int | None = None
     envelope_id: int | None = None
+    account_id: int | None = None
+    other_account_id: int | None = None       # la otra cuenta cuando el dinero cambia de sitio
 
 
-def validate_tx(type_: str | None, amount: int | None,
-                category_id: int | None, envelope_id: int | None) -> list[str]:
+def validate_tx(type_: str | None, amount: int | None, category_id: int | None,
+                envelope_id: int | None, account_id: int | None = 1,
+                other_account_id: int | None = None) -> list[str]:
     errors = []
     if type_ not in TYPES:
         errors.append("Elige el tipo de movimiento.")
@@ -52,7 +58,56 @@ def validate_tx(type_: str | None, amount: int | None,
         errors.append("Elige el sobre.")
     if type_ in NEEDS_CATEGORY and not category_id:
         errors.append("Elige una categoría.")
+    if type_ == TRASPASO:
+        if not other_account_id:
+            errors.append("Elige de qué cuenta sale el dinero.")
+        elif other_account_id == account_id:
+            errors.append("El dinero tiene que ir a una cuenta distinta.")
+    elif type_ in NEEDS_ENVELOPE and other_account_id and other_account_id == account_id:
+        errors.append("La cuenta del sobre y la otra cuenta no pueden ser la misma.")
     return errors
+
+
+# ---------------------------------------------------------------- cuentas
+
+def account_moves(tx: Tx) -> dict[int, int]:
+    """Cuánto sube o baja cada cuenta con este movimiento.
+
+    Un aporte o un retiro solo mueven dinero si dices de qué otra cuenta sale o
+    a cuál va; si no, son solo una etiqueta (el dinero ya estaba donde toca).
+    """
+    if tx.account_id is None:
+        return {}
+    if tx.type == INGRESO:
+        return {tx.account_id: tx.amount}
+    if tx.type == GASTO:
+        return {tx.account_id: -tx.amount}
+    if tx.type == TRASPASO and tx.other_account_id:
+        return {tx.other_account_id: -tx.amount, tx.account_id: tx.amount}
+    if tx.type == APORTE and tx.other_account_id:          # sale de la otra, entra en la del sobre
+        return {tx.other_account_id: -tx.amount, tx.account_id: tx.amount}
+    if tx.type == RETIRO and tx.other_account_id:          # sale de la del sobre, entra en la otra
+        return {tx.account_id: -tx.amount, tx.other_account_id: tx.amount}
+    return {}
+
+
+def account_balance_at(txs, account_id: int, initial: int, until: date) -> int:
+    """Saldo de una cuenta contando solo lo apuntado hasta esa fecha (incluida)."""
+    saldo = initial
+    for tx in txs:
+        if tx.date <= until:
+            saldo += account_moves(tx).get(account_id, 0)
+    return saldo
+
+
+def account_balances(txs, accounts) -> dict[int, int]:
+    """Saldo de cada cuenta: lo que había al empezar más todo lo que ha pasado."""
+    saldos = {a["id"]: (a["initial_balance"] or 0) for a in accounts}
+    for tx in txs:
+        for cuenta, delta in account_moves(tx).items():
+            if cuenta in saldos:
+                saldos[cuenta] += delta
+    return saldos
 
 
 # ---------------------------------------------------------------- sobres
@@ -137,6 +192,7 @@ def in_month(tx: Tx, year: int, month: int) -> bool:
 
 
 def month_summary(txs, year: int, month: int) -> MonthSummary:
+    """Un traspaso entre cuentas no es ni gasto ni ingreso: no aparece aquí."""
     income = payroll = saved = from_env = 0
     for tx in txs:
         if not in_month(tx, year, month):
@@ -240,23 +296,23 @@ def installments_ratio(statuses, salary: int | None) -> float | None:
 
 @dataclass(frozen=True)
 class Reconciliation:
-    real: int                      # saldo real de la cuenta, escrito a mano
-    in_envelopes: int              # Σ saldos de todos los sobres
+    real: int                      # saldo real de la cuenta, el que dice el banco
+    calculated: int                # saldo que calcula la app
     difference: int
     level: str                     # 'ok' | 'sobra' | 'falta'
     message: str
 
 
-def reconcile(real: int, in_envelopes: int, small: int = SMALL_SURPLUS) -> Reconciliation:
-    """Cuadre = último saldo real − Σ saldos de todos los sobres."""
-    diff = real - in_envelopes
+def reconcile(real: int, calculated: int, small: int = SMALL_SURPLUS) -> Reconciliation:
+    """Compara el saldo que dice el banco con el que calcula la app."""
+    diff = real - calculated
     if diff == 0:
-        return Reconciliation(real, in_envelopes, 0, "ok", "Todo apuntado")
+        return Reconciliation(real, calculated, 0, "ok", "Cuadra con el banco")
     if diff > 0:
         if diff <= small:
-            msg = f"Hay {eur(diff)} sin apuntar (¿intereses?)"
+            msg = f"En el banco hay {eur(diff)} más (¿intereses?)"
         else:
-            msg = f"Hay {eur(diff)} sin apuntar: ¿algún aporte sin registrar?"
-        return Reconciliation(real, in_envelopes, diff, "sobra", msg)
-    return Reconciliation(real, in_envelopes, diff, "falta",
-                          f"Faltan {eur(-diff)}: algún pago sin apuntar")
+            msg = f"En el banco hay {eur(diff)} más: algún ingreso sin apuntar"
+        return Reconciliation(real, calculated, diff, "sobra", msg)
+    return Reconciliation(real, calculated, diff, "falta",
+                          f"En el banco hay {eur(-diff)} menos: algún gasto sin apuntar")

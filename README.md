@@ -6,27 +6,34 @@ App web de finanzas personales **para una sola persona**, pensada primero para e
 móvil y para tenerla en casa: un contenedor, una base de datos SQLite y ninguna
 cuenta en la nube. Sustituye a la típica hoja de cálculo de gastos.
 
-La idea central son los **sobres**: apartas dinero con un nombre («Vacaciones»,
-«Coche») y, cuando gastas de ahí, ese gasto no vuelve a restar del dinero libre
-del mes, porque ya lo habías guardado.
+Dos ideas la sostienen:
+
+- **Cuentas con saldo de verdad**: pones el saldo inicial una vez y la app lo
+  calcula sola con tus movimientos. Puedes tener las que quieras (la del día a
+  día, la de ahorro, una de comida…) y mover dinero entre ellas con un traspaso.
+- **Sobres**: apartas dinero con un nombre («Vacaciones», «Coche») dentro de una
+  cuenta y, cuando gastas de ahí, ese gasto no vuelve a restar del dinero libre
+  del mes, porque ya lo habías guardado.
 
 | Móvil | Ordenador |
 |---|---|
 | <img src="docs/panel.png" width="260"> | <img src="docs/ordenador.png" width="480"> |
 
-| Apuntar en 5 segundos | Presupuesto |
+| Apuntar en 5 segundos | Cuentas |
 |---|---|
-| <img src="docs/apuntar.png" width="260"> | <img src="docs/presupuesto.png" width="260"> |
+| <img src="docs/apuntar.png" width="260"> | <img src="docs/cuentas.png" width="260"> |
 
 ## Qué hace
 
 - **Panel del mes**: ingresos, gastos, lo guardado y el **libre** (ingresos − gastos − aportado).
 - **Apuntar rápido**: importe con teclado numérico, cuatro tipos de movimiento y
   las categorías más usadas a un toque. Instalada como PWA, se abre a pantalla completa.
-- **Sobres**: objetivo, aporte mensual, barra de progreso y cuánto falta.
-  Las **sobras del mes** pueden guardarse solas en el sobre que elijas.
-- **Cuadre**: escribes el saldo real de la cuenta donde tienes el ahorro y te dice
-  si te falta algo por apuntar.
+- **Cuentas**: saldo de cada una, cuánto está apartado en sobres y cuánto queda
+  libre. Los traspasos mueven dinero entre cuentas sin contar como gasto ni ingreso.
+- **Sobres**: objetivo, aporte mensual, barra de progreso y cuánto falta. Cada uno
+  vive en una cuenta. Las **sobras del mes** pueden guardarse solas en el que elijas.
+- **Cuadre opcional**: apuntas de vez en cuando el saldo que dice el banco y la app
+  te avisa si se le ha escapado algo. Un botón deduce el saldo inicial para que cuadre.
 - **Presupuesto** por categoría, con avisos configurables.
 - **Deudas**: cuotas pagadas y pendientes, última cuota y qué parte de la nómina se va en ellas.
 - **Resumen** de 12 meses, en tabla y en gráfico.
@@ -47,7 +54,7 @@ Todo está en castellano, en euros y con fechas dd/mm/aaaa.
 
 ```bash
 git clone https://github.com/GodoHZ/cuentas-claras.git && cd cuentas-claras
-docker build -t finanzas-app:1.9.0 --build-arg VERSION=1.9.0 .
+docker build -t finanzas-app:2.0.0 --build-arg VERSION=2.0.0 .
 docker compose up -d
 ```
 
@@ -99,7 +106,10 @@ de dejar ficheros escondidos debajo.
 - Un **gasto pagado desde un sobre** no resta del libre (ese dinero ya estaba
   guardado), pero **sí** cuenta en el presupuesto de su categoría.
 - **Saldo de un sobre** = aportes − gastos con ese sobre − retiros.
-- **Cuadre** = último saldo real escrito − suma de todos los sobres.
+- **Saldo de una cuenta** = saldo inicial + ingresos − gastos ± traspasos. Un aporte
+  a un sobre mueve dinero solo si dices de qué cuenta sale; si no, solo lo aparta.
+- **Libre en una cuenta** = su saldo − lo que tienen los sobres que viven en ella.
+- **Cuadre** = lo que dice el banco − lo que calcula la app.
 - Lo que tiene movimientos solo se puede **archivar**, no borrar; lo que no se ha
   usado nunca se borra del todo.
 

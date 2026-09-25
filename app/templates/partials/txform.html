@@ -21,7 +21,8 @@
     <legend class="sr">Tipo de movimiento</legend>
     {% for key, label, hint in [("gasto", "Gasto", "Pago algo"), ("ingreso", "Ingreso", "Cobro algo"),
                                 ("aporte_sobre", "Aporte a sobre", "Guardo en un sobre"),
-                                ("retiro_sobre", "Retiro de sobre", "Saco sin gastarlo")] %}
+                                ("retiro_sobre", "Retiro de sobre", "Saco del sobre"),
+                                ("traspaso", "Traspaso", "Muevo dinero entre cuentas")] %}
     <label class="type type-{{ key }}">
       <input type="radio" name="tipo" value="{{ key }}" {% if f.tipo == key %}checked{% endif %}>
       <span><b>{{ label }}</b><small>{{ hint }}</small></span>
@@ -56,18 +57,33 @@
     <div class="chips">
       <label class="chip" data-show="gasto"><input type="radio" name="sobre_id" value="" {% if not f.sobre_id %}checked{% endif %}><span>No, de la nómina</span></label>
       {% for e in opts.envelopes %}
-      <label class="chip chip-env"><input type="radio" name="sobre_id" value="{{ e.id }}" {% if f.sobre_id == e.id %}checked{% endif %}><span>{{ e.name }}</span></label>
+      <label class="chip chip-env"><input type="radio" name="sobre_id" value="{{ e.id }}" data-cuenta="{{ e.account_id or '' }}" {% if f.sobre_id == e.id %}checked{% endif %}><span>{{ e.name }}</span></label>
       {% endfor %}
     </div>
   </div>
 
-  <div class="field">
-    <p class="legend">Cuenta</p>
+  {# La cuenta del movimiento. En un aporte o un retiro no se pregunta: el dinero
+     del sobre vive en la cuenta del sobre. #}
+  <div class="field" data-show="gasto ingreso traspaso">
+    <p class="legend" data-show="gasto ingreso">Cuenta</p>
+    <p class="legend" data-show="traspaso">¿A qué cuenta va?</p>
     <div class="chips">
       {% for a in opts.accounts %}
       <label class="chip"><input type="radio" name="cuenta_id" value="{{ a.id }}" {% if f.cuenta_id == a.id %}checked{% endif %}><span>{{ a.name }}</span></label>
       {% endfor %}
     </div>
+  </div>
+
+  <div class="field" data-show="aporte retiro traspaso">
+    <p class="legend" data-show="aporte traspaso">¿De qué cuenta sale?</p>
+    <p class="legend" data-show="retiro">¿A qué cuenta va?</p>
+    <div class="chips">
+      <label class="chip" data-show="aporte retiro"><input type="radio" name="otra_cuenta_id" value="" {% if not f.otra_cuenta_id %}checked{% endif %}><span>Ninguna: ya estaba ahí</span></label>
+      {% for a in opts.accounts %}
+      <label class="chip"><input type="radio" name="otra_cuenta_id" value="{{ a.id }}" {% if f.otra_cuenta_id == a.id %}checked{% endif %}><span>{{ a.name }}</span></label>
+      {% endfor %}
+    </div>
+    <p class="hint" data-show="aporte">Si el dinero ya estaba en la cuenta del sobre, deja «Ninguna»: solo lo aparta.</p>
   </div>
 
   <div class="field">

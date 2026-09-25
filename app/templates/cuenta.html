@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% from "_iconos.html" import icono, icono_nivel %}
+{% block title %}{{ cuenta.name }} · Finanzas{% endblock %}
+{% block heading %}{{ cuenta.name }}{% endblock %}
+{% block main %}
+<div class="card total-card">
+  <p class="label">Saldo</p>
+  <p class="hero-num num">{{ balance|eur }}</p>
+  <p class="hint">Saldo inicial ({{ cuenta.initial_balance|eur }}) más todo lo que has apuntado.</p>
+</div>
+
+{% if sobres %}
+<div class="card">
+  <div class="row-between"><span>Apartado en sobres</span><span class="num">{{ in_envelopes|eur }}</span></div>
+  <div class="row-between strong"><span>Libre en esta cuenta</span>
+    <span class="num {{ 'neg' if free < 0 }}">{{ free|eur }}</span></div>
+  <p class="hint">Sobres que viven aquí: {% for e in sobres %}<a href="/sobres/{{ e.id }}">{{ e.name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}.
+    Lo «libre» es lo que puedes gastar sin tocar lo que ya tenías apartado.</p>
+</div>
+{% endif %}
+
+<section id="cuadre" class="card">
+  <h2>¿Cuadra con el banco?</h2>
+  {% if cuadre %}
+  <div class="cuadre-result level-{{ cuadre.r.level }}">
+    <p class="cuadre-msg">{{ icono_nivel(cuadre.r.level) }} {{ cuadre.r.message }}</p>
+    <dl class="cuadre-table">
+      <dt>Según el banco (el {{ cuadre.check.date|fecha }})</dt><dd class="num">{{ cuadre.r.real|eur }}</dd>
+      <dt>Según la app</dt><dd class="num">{{ cuadre.r.calculated|eur }}</dd>
+      <dt>Diferencia</dt><dd class="num strong">{{ cuadre.r.difference|eur_sign }}</dd>
+    </dl>
+    {% if cuadre.r.difference %}
+    <form method="post" action="/cuentas/{{ cuenta.id }}/ajustar-inicial"
+          hx-confirm="¿Ajustar el saldo inicial en {{ cuadre.r.difference|eur_sign }} para que cuadre con el banco?">
+      <button class="btn btn-small" type="submit">Ajustar el saldo inicial y cuadrar</button>
+    </form>
+    <p class="hint">Úsalo al empezar: si el saldo de antes de tu primer movimiento no era 0, esto lo
+      deduce solo. Si la diferencia es porque te falta apuntar algo, mejor apúntalo.</p>
+    {% endif %}
+  </div>
+  {% else %}
+  <p class="hint">Apunta de vez en cuando el saldo que ves en el banco y la app te dirá si se le ha escapado algo.
+    No hace falta hacerlo: el saldo se calcula solo.</p>
+  {% endif %}
+
+  <form method="post" action="/cuentas/{{ cuenta.id }}/comprobar" class="cuadre-form">
+    <label class="legend" for="saldo-real">Saldo que ves ahora en {{ cuenta.name }}</label>
+    <div class="inline-form">
+      <input id="saldo-real" name="saldo" inputmode="decimal" autocomplete="off" placeholder="0,00">
+      <input type="hidden" name="fecha" value="{{ hoy }}">
+      <button class="btn btn-primary" type="submit">Comprobar</button>
+    </div>
+  </form>
+
+  {% if checks %}
+  <details class="history">
+    <summary>Comprobaciones anteriores</summary>
+    <ul class="plain">
+      {% for c in checks %}
+      <li class="row-between"><span>{{ c.date|fecha }}</span><span class="num">{{ c.balance|eur }}</span>
+        <form method="post" action="/cuentas/comprobaciones/{{ c.id }}/borrar"
+              hx-confirm="¿Borrar la comprobación del {{ c.date|fecha }}?">
+          <button class="link danger" type="submit">Borrar</button></form>
+      </li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+</section>
+
+<div class="actions">
+  <a class="btn" href="/nuevo" hx-boost="false" data-qa='{"tipo": "traspaso", "cuenta": {{ cuenta.id }}}'>Traspasar aquí</a>
+  <a class="btn" href="/movimientos?mes=todos&cuenta={{ cuenta.id }}">Ver todos</a>
+</div>
+
+<h2 class="section-title">Movimientos de esta cuenta</h2>
+{% if history %}
+<div class="card list">
+  {% for h in history %}
+  <a class="tx hist" href="/movimientos/{{ h.row.id }}">
+    <span class="tx-main">
+      <span class="tx-title">{{ h.row.concept or h.row.category or h.row.envelope or TYPES[h.row.type] }}</span>
+      <span class="tx-sub">{{ h.row.date|fecha }} · {{ TYPES[h.row.type] }}
+        {%- if h.row.other_account %} · con {{ h.row.other_account }}{% endif %}</span>
+    </span>
+    <span class="tx-amount num">{{ h.delta|eur_sign }}<small>queda {{ h.balance|eur }}</small></span>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty"><p>Esta cuenta todavía no tiene movimientos.</p></div>
+{% endif %}
+{% endblock %}

@@ -151,7 +151,7 @@ def summary(path: Path) -> dict:
     conn.row_factory = sqlite3.Row
     try:
         counts = {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
-                  for t in ("categories", "envelopes", "accounts", "transactions", "loans", "tr_checks")}
+                  for t in ("categories", "envelopes", "accounts", "transactions", "loans", "account_checks")}
         txs = [calc.Tx(date.fromisoformat(r["date"]), r["type"], r["amount"], r["category_id"], r["envelope_id"])
                for r in conn.execute("SELECT * FROM transactions")]
         total = sum(calc.envelope_balances(txs).values())

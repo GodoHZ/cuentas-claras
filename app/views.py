@@ -11,11 +11,13 @@ from .money import add_months_ym, eur, month_name
 def envelopes_overview(conn, txs, include_archived: bool = False):
     """Tarjetas de sobres y total en sobres (el total incluye los archivados)."""
     balances = calc.envelope_balances(txs)
+    cuentas = {a["id"]: a["name"] for a in repo.accounts(conn)}
     cards = []
     for env in repo.envelopes(conn):
         balance = balances.get(env["id"], 0)
         if env["active"] or (include_archived and balance):
-            cards.append({"env": env, "st": calc.envelope_status(balance, env["target"], env["monthly"])})
+            cards.append({"env": env, "st": calc.envelope_status(balance, env["target"], env["monthly"]),
+                          "account": cuentas.get(env["account_id"])})
     return cards, sum(balances.values())
 
 
@@ -97,15 +99,37 @@ def envelope_account_name(conn) -> str:
     return row["name"] if row else "tu cuenta de ahorro"
 
 
-def reconciliation(conn, total_in_envelopes: int):
-    last = repo.last_check(conn)
+def tx_de_fila(row) -> calc.Tx:
+    """Una fila de la base de datos en el formato que usan las reglas."""
+    return calc.Tx(date.fromisoformat(row["date"]), row["type"], row["amount"], row["category_id"],
+                   row["envelope_id"], row["account_id"], row["other_account_id"])
+
+
+def accounts_overview(conn, txs, include_archived: bool = False):
+    """Cada cuenta con su saldo, lo que tiene apartado en sobres y lo que queda libre."""
+    cuentas = repo.accounts(conn) if include_archived else repo.accounts(conn, active=True)
+    saldos = calc.account_balances(txs, repo.accounts(conn))
+    en_sobres = calc.envelope_balances(txs)
+    tarjetas = []
+    for cuenta in cuentas:
+        apartado = sum(saldo for env, saldo in en_sobres.items()
+                       if (repo.get_row(conn, "envelopes", env) or {"account_id": None})["account_id"] == cuenta["id"])
+        saldo = saldos.get(cuenta["id"], 0)
+        tarjetas.append({
+            "account": cuenta, "balance": saldo, "in_envelopes": apartado, "free": saldo - apartado,
+            "check": reconciliation(conn, cuenta["id"], saldo),
+        })
+    return tarjetas, sum(saldos.get(c["id"], 0) for c in cuentas)
+
+
+def reconciliation(conn, account_id: int, calculated: int):
+    """Lo que dijo el banco la última vez frente a lo que calcula la app."""
+    last = repo.last_check(conn, account_id)
     if not last:
         return None
     return {
         "check": last,
-        "r": calc.reconcile(last["balance"], total_in_envelopes,
-                            repo.rule(conn, "reconcile_small_cents")),
-        "moves_after": repo.envelope_moves_after(conn, last["date"]),
+        "r": calc.reconcile(last["balance"], calculated, repo.rule(conn, "reconcile_small_cents")),
     }
 
 
@@ -187,6 +211,8 @@ def tx_form_options(conn, include_category: int | None = None, include_envelope:
     default_acc = repo.int_setting(conn, "default_account_id") or (accounts[0]["id"] if accounts else None)
     envelope_acc = repo.int_setting(conn, "envelope_account_id") or default_acc
     return {
+        # en qué cuenta vive cada sobre: al elegir sobre, la cuenta se pone sola
+        "envelope_accounts": {e["id"]: e["account_id"] for e in envs},
         "cats_gasto": groups["gasto"],
         "cats_ingreso": groups["ingreso"],
         "envelopes": envs,
@@ -204,8 +230,13 @@ def blank_tx_form(opts, today: date, type_: str = calc.GASTO) -> dict:
     }
 
 
-def saved_message(type_: str, amount: int, category: str | None, envelope: str | None) -> str:
-    what = {calc.GASTO: "Gasto", calc.INGRESO: "Ingreso", calc.APORTE: "Aporte", calc.RETIRO: "Retiro"}[type_]
+def saved_message(type_: str, amount: int, category: str | None, envelope: str | None,
+                  account: str | None = None, other_account: str | None = None) -> str:
+    nombres = {calc.GASTO: "Gasto", calc.INGRESO: "Ingreso", calc.APORTE: "Aporte",
+               calc.RETIRO: "Retiro", calc.TRASPASO: "Traspaso"}
+    what = nombres.get(type_, "Movimiento")
+    if type_ == calc.TRASPASO:
+        return f"{what} de {eur(amount)} · {other_account} → {account}"
     where = envelope if type_ in calc.NEEDS_ENVELOPE else category
     if type_ == calc.GASTO and envelope:
         where = f"{category} (desde {envelope})"

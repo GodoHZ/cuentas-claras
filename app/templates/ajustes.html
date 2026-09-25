@@ -126,6 +126,11 @@
             <input id="env-{{ e.id }}-a" name="aporte" inputmode="decimal" value="{{ e.monthly|importe_input }}">
           </div>
         </div>
+        <label class="legend" for="env-{{ e.id }}-c">¿En qué cuenta está este dinero?</label>
+        <select id="env-{{ e.id }}-c" name="cuenta">
+          <option value="">— sin cuenta —</option>
+          {% for a in accounts %}<option value="{{ a.id }}" {% if e.account_id == a.id %}selected{% endif %}>{{ a.name }}</option>{% endfor %}
+        </select>
         <label class="legend" for="env-{{ e.id }}-nota">Nota</label>
         <input id="env-{{ e.id }}-nota" name="nota" value="{{ e.note }}" maxlength="200">
         <button class="btn btn-primary btn-small" type="submit">Guardar</button>
@@ -137,6 +142,10 @@
       <summary><span>{{ icono("nuevo") }} Nuevo sobre</span></summary>
       <form method="post" action="/ajustes/lista/sobres" class="stack">
         <input name="nombre" placeholder="Nombre" maxlength="60">
+        <select name="cuenta">
+          <option value="">— ¿en qué cuenta está este dinero? —</option>
+          {% for a in accounts %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
+        </select>
         <input name="objetivo" inputmode="decimal" placeholder="Objetivo en € (opcional)">
         <input name="aporte" inputmode="decimal" placeholder="Aporte mensual en € (opcional)">
         <input name="nota" placeholder="Nota (opcional)" maxlength="200">
@@ -153,7 +162,12 @@
     <details class="row-item {{ 'archived' if not a.active }}">
       <summary><span>{{ a.name }}</span><span class="muted">{% if not a.active %}archivada{% endif %}</span></summary>
       <form method="post" action="/ajustes/lista/cuentas/{{ a.id }}" class="stack">
-        <input name="nombre" value="{{ a.name }}" maxlength="60" aria-label="Nombre de la cuenta">
+        <label class="legend" for="cta-{{ a.id }}-n">Nombre</label>
+        <input id="cta-{{ a.id }}-n" name="nombre" value="{{ a.name }}" maxlength="60">
+        <label class="legend" for="cta-{{ a.id }}-s">Saldo inicial (€)</label>
+        <input id="cta-{{ a.id }}-s" name="saldo_inicial" inputmode="decimal" value="{{ a.initial_balance|importe_input }}">
+        <p class="hint">Lo que había en la cuenta antes del primer movimiento que apuntaste. A partir de ahí
+          el saldo lo calcula la app sola.</p>
         <button class="btn btn-primary btn-small" type="submit">Guardar</button>
       </form>
       {{ row_actions('cuentas', a, a.id not in usados.cuentas) }}
@@ -163,6 +177,7 @@
       <summary><span>{{ icono("nuevo") }} Nueva cuenta</span></summary>
       <form method="post" action="/ajustes/lista/cuentas" class="stack">
         <input name="nombre" placeholder="Nombre" maxlength="60">
+        <input name="saldo_inicial" inputmode="decimal" placeholder="Saldo inicial en € (opcional)">
         <button class="btn btn-primary btn-small" type="submit">Crear</button>
       </form>
     </details>

@@ -137,14 +137,15 @@ def test_ratio_cuotas():
 # ---------------------------------------------------------------- cuadre
 
 def test_cuadre():
-    assert calc.reconcile(300370, 300370).message == "Todo apuntado"
+    """Compara lo que dice el banco con lo que calcula la app."""
+    assert calc.reconcile(300370, 300370).message == "Cuadra con el banco"
     assert calc.reconcile(300370, 300370).level == "ok"
     pequeño = calc.reconcile(300520, 300370)
     assert pequeño.level == "sobra" and "intereses" in pequeño.message and "1,50" in pequeño.message
     grande = calc.reconcile(400370, 300370)
-    assert grande.level == "sobra" and "aporte" in grande.message
+    assert grande.level == "sobra" and "ingreso sin apuntar" in grande.message
     falta = calc.reconcile(290370, 300370)
-    assert falta.level == "falta" and falta.message.startswith("Faltan 100,00")
+    assert falta.level == "falta" and "100,00" in falta.message and "menos" in falta.message
 
 
 def test_umbrales_configurables():
@@ -152,5 +153,60 @@ def test_umbrales_configurables():
     assert calc.budget_level(0.85, warn=0.9) == "ok"          # con el aviso al 90 %, aún no
     assert calc.budget_line(10000, 8500, warn=0.9).level == "ok"
     assert calc.reconcile(300370 + 500, 300370, small=100).level == "sobra"
-    assert "aporte" in calc.reconcile(300370 + 500, 300370, small=100).message
+    assert "ingreso" in calc.reconcile(300370 + 500, 300370, small=100).message
     assert "intereses" in calc.reconcile(300370 + 500, 300370, small=1000).message
+
+
+
+# ---------------------------------------------------------------- cuentas
+
+CUENTAS = [{"id": 1, "initial_balance": 100000}, {"id": 2, "initial_balance": 0}]
+
+
+def tx_cuentas(day, type_, amount, cuenta, otra=None, envelope=None, category=None):
+    return Tx(date.fromisoformat(day), type_, amount, category, envelope, cuenta, otra)
+
+
+def test_saldo_de_una_cuenta():
+    """Saldo = lo que había al empezar + ingresos − gastos ± traspasos."""
+    txs = [tx_cuentas("2026-09-01", INGRESO, 150000, 1, category=1),
+           tx_cuentas("2026-09-02", GASTO, 20000, 1, category=2),
+           tx_cuentas("2026-09-03", calc.TRASPASO, 50000, 2, otra=1)]      # de la 1 a la 2
+    saldos = calc.account_balances(txs, CUENTAS)
+    assert saldos[1] == 100000 + 150000 - 20000 - 50000
+    assert saldos[2] == 50000
+    assert sum(saldos.values()) == 100000 + 150000 - 20000                 # un traspaso no crea dinero
+
+
+def test_un_traspaso_no_es_gasto_ni_ingreso():
+    txs = [tx_cuentas("2026-09-03", calc.TRASPASO, 50000, 2, otra=1)]
+    m = calc.month_summary(txs, 2026, 9)
+    assert (m.income, m.payroll_spent, m.saved, m.free) == (0, 0, 0, 0)
+
+
+def test_un_aporte_mueve_el_dinero_si_dices_de_donde_sale():
+    con_origen = tx_cuentas("2026-09-04", APORTE, 30000, 2, otra=1, envelope=7)
+    assert calc.account_moves(con_origen) == {1: -30000, 2: 30000}
+    solo_etiqueta = tx_cuentas("2026-09-04", APORTE, 30000, 2, envelope=7)
+    assert calc.account_moves(solo_etiqueta) == {}                         # ya estaba ahí
+    # en los dos casos el sobre sube igual
+    assert calc.envelope_balances([con_origen])[7] == 30000
+    assert calc.envelope_balances([solo_etiqueta])[7] == 30000
+
+
+def test_un_retiro_devuelve_el_dinero_a_la_otra_cuenta():
+    retiro = tx_cuentas("2026-09-05", RETIRO, 10000, 2, otra=1, envelope=7)
+    assert calc.account_moves(retiro) == {2: -10000, 1: 10000}
+    assert calc.envelope_balances([retiro])[7] == -10000
+
+
+def test_un_gasto_desde_un_sobre_sale_de_su_cuenta():
+    gasto = tx_cuentas("2026-09-06", GASTO, 5000, 2, envelope=7, category=3)
+    assert calc.account_moves(gasto) == {2: -5000}
+    assert calc.envelope_balances([gasto])[7] == -5000
+
+
+def test_validacion_del_traspaso():
+    assert "Elige de qué cuenta sale el dinero." in calc.validate_tx(calc.TRASPASO, 100, None, None, 1, None)
+    assert "El dinero tiene que ir a una cuenta distinta." in calc.validate_tx(calc.TRASPASO, 100, None, None, 1, 1)
+    assert calc.validate_tx(calc.TRASPASO, 100, None, None, 1, 2) == []

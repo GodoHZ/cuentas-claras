@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% from "_iconos.html" import icono, icono_nivel %}
+{% block title %}Cuentas · Finanzas{% endblock %}
+{% block heading %}Cuentas{% endblock %}
+{% block main %}
+<div class="card total-card">
+  <p class="label">Total en tus cuentas</p>
+  <p class="hero-num num">{{ total|eur }}</p>
+  <p class="hint">Todo lo que tienes, sumando las cuentas activas. La app lo calcula sola a partir de tus
+    movimientos: solo hace falta que el saldo inicial de cada cuenta sea correcto.</p>
+</div>
+
+{% for c in cards %}
+<a class="card cuenta-card" href="/cuentas/{{ c.account.id }}">
+  <div class="env-top">
+    <span class="env-name">{{ c.account.name }}</span>
+    <span class="env-balance num">{{ c.balance|eur }}</span>
+  </div>
+  {% if c.in_envelopes %}
+  <p class="env-meta">
+    <span>{{ c.in_envelopes|eur }} apartados en sobres</span>
+    <span>Libre: <b class="num {{ 'neg' if c.free < 0 }}">{{ c.free|eur }}</b></span>
+  </p>
+  {% if c.free < 0 %}
+  <p class="hint level-pasado">{{ icono_nivel('pasado') }} Tienes apartado en sobres más dinero del que hay
+    en esta cuenta. Repasa los aportes o el saldo inicial.</p>
+  {% endif %}
+  {% else %}
+  <p class="env-meta"><span class="muted">Sin sobres en esta cuenta</span></p>
+  {% endif %}
+  {% if c.check %}
+  <p class="hint level-{{ c.check.r.level }}">{{ icono_nivel(c.check.r.level) }} {{ c.check.r.message }}
+    <span class="muted">· comprobado el {{ c.check.check.date|fecha }}</span></p>
+  {% endif %}
+</a>
+{% else %}
+<div class="empty"><p>No tienes cuentas activas.</p>
+  <p class="muted">Se crean en <a href="/ajustes?abierto=cuentas#cuentas">Ajustes › Cuentas</a>.</p></div>
+{% endfor %}
+
+{% if archived %}
+<h2 class="section-title">Archivadas</h2>
+{% for c in archived %}
+<a class="card cuenta-card archivada" href="/cuentas/{{ c.account.id }}">
+  <div class="env-top"><span class="env-name">{{ c.account.name }}</span>
+    <span class="env-balance num">{{ c.balance|eur }}</span></div>
+</a>
+{% endfor %}
+{% endif %}
+
+<p class="muted small">Para crear cuentas, renombrarlas o cambiar su saldo inicial:
+  <a href="/ajustes?abierto=cuentas#cuentas">Ajustes › Cuentas</a>.</p>
+{% endblock %}

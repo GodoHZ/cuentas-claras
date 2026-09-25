@@ -272,12 +272,13 @@ def panel(request: Request, mes: str = "", conn=Depends(get_db)):
     year, month = parse_month(mes, (hoy.year, hoy.month))
     txs = repo.all_txs(conn)
     cards, total = views.envelopes_overview(conn, txs)
+    cuentas, total_cuentas = views.accounts_overview(conn, txs)
     return render(request, "panel.html", {
         "sweep": views.pending_sweep(conn, txs, hoy),
+        "cuentas": cuentas, "total_cuentas": total_cuentas,
         "year": year, "month": month, "is_current": (year, month) == (hoy.year, hoy.month),
         "m": calc.month_summary(txs, year, month),
         "cards": cards, "total_envelopes": total,
-        "cuadre": views.reconciliation(conn, total),
         "debts": views.debts(conn, txs, hoy),
         "budget": views.budget(conn, txs, year, month),
     })
@@ -298,32 +299,46 @@ def read_tx_form(conn, form) -> tuple[dict, dict | None]:
     category_id = int_or_none(form.get("categoria_id"))
     envelope_id = int_or_none(form.get("sobre_id"))
     account_id = int_or_none(form.get("cuenta_id"))
+    other_id = int_or_none(form.get("otra_cuenta_id"))
+    envelope = repo.get_row(conn, "envelopes", envelope_id) if envelope_id else None
     if type_ in calc.NEEDS_ENVELOPE:
         category_id = None
+        if envelope and envelope["account_id"]:
+            account_id = envelope["account_id"]          # el dinero del sobre vive en su cuenta
+    if type_ == calc.GASTO:
+        other_id = None
+        if envelope and envelope["account_id"]:
+            account_id = envelope["account_id"]          # se paga con el dinero del sobre
     if type_ == calc.INGRESO:
-        envelope_id = None
+        envelope_id, other_id = None, None
+    if type_ == calc.TRASPASO:
+        category_id, envelope_id = None, None
     try:
         day = parse_date(form.get("fecha"))
     except ValueError:
         day = None
         errors.append("La fecha no es válida.")
     concept = (form.get("concepto") or "").strip()[:200]
-    errors += calc.validate_tx(type_, amount if amount_ok else 1, category_id, envelope_id)
+    errors += calc.validate_tx(type_, amount if amount_ok else 1, category_id, envelope_id,
+                               account_id, other_id)
     if category_id and not repo.get_row(conn, "categories", category_id):
         errors.append("Esa categoría ya no existe.")
     if envelope_id and not repo.get_row(conn, "envelopes", envelope_id):
         errors.append("Ese sobre ya no existe.")
     if not account_id or not repo.get_row(conn, "accounts", account_id):
         errors.append("Elige la cuenta.")
+    if other_id and not repo.get_row(conn, "accounts", other_id):
+        errors.append("Esa otra cuenta ya no existe.")
     uid = (form.get("uid") or "").strip()[:40] or None
     values = {"tipo": type_, "importe": form.get("importe") or "", "categoria_id": category_id,
-              "sobre_id": envelope_id, "cuenta_id": account_id,
+              "sobre_id": envelope_id, "cuenta_id": account_id, "otra_cuenta_id": other_id,
               "fecha": day.isoformat() if day else (form.get("fecha") or ""), "concepto": concept,
               "errors": errors}
     if errors:
         return values, None
     return values, dict(date=day.isoformat(), type=type_, category_id=category_id, envelope_id=envelope_id,
-                        account_id=account_id, concept=concept, amount=amount, client_uid=uid)
+                        account_id=account_id, other_account_id=other_id, concept=concept,
+                        amount=amount, client_uid=uid)
 
 
 @router.get("/nuevo")
@@ -350,7 +365,8 @@ async def create_tx(request: Request, conn=Depends(get_db)):
     with conn:
         tx_id = repo.insert_tx(conn, **fields)
     tx = repo.get_tx(conn, tx_id)
-    message = views.saved_message(tx["type"], tx["amount"], tx["category"], tx["envelope"])
+    message = views.saved_message(tx["type"], tx["amount"], tx["category"], tx["envelope"],
+                                  tx["account"], tx["other_account"])
     if in_dialog:
         opts = views.tx_form_options(conn)
         fresh = views.blank_tx_form(opts, today(request))
@@ -374,21 +390,23 @@ def sweep_now(request: Request, conn=Depends(get_db)):
 
 @router.get("/movimientos")
 def tx_list(request: Request, mes: str = "", tipo: str = "", categoria: str = "", sobre: str = "",
-            conn=Depends(get_db)):
+            cuenta: str = "", conn=Depends(get_db)):
     hoy = today(request)
     all_months = mes == "todos"
     year, month = parse_month(mes, (hoy.year, hoy.month))
     type_ = tipo if tipo in calc.TYPES else None
-    cat_id, env_id = int_or_none(categoria), int_or_none(sobre)
+    cat_id, env_id, acc_id = int_or_none(categoria), int_or_none(sobre), int_or_none(cuenta)
     rows = repo.tx_rows(conn, month=None if all_months else (year, month), type_=type_,
-                        category_id=cat_id, envelope_id=env_id, limit=1000 if all_months else None)
-    filters = {"tipo": type_ or "", "categoria": cat_id or "", "sobre": env_id or ""}
+                        category_id=cat_id, envelope_id=env_id, account_id=acc_id,
+                        limit=1000 if all_months else None)
+    filters = {"tipo": type_ or "", "categoria": cat_id or "", "sobre": env_id or "", "cuenta": acc_id or ""}
     return render(request, "movimientos.html", {
         "rows": rows, "year": year, "month": month, "all_months": all_months,
         "filters": filters, "filtered": any(filters.values()),
         "filter_qs": urlencode({k: v for k, v in filters.items() if v}),
         "m": None if all_months else calc.month_summary(repo.all_txs(conn), year, month),
         "categories": repo.categories(conn), "envelopes": repo.envelopes(conn),
+        "accounts": repo.accounts(conn),
     })
 
 
@@ -444,43 +462,100 @@ def envelopes_page(request: Request, conn=Depends(get_db)):
     return render(request, "sobres.html", {
         "cards": [c for c in cards if c["env"]["active"]],
         "archived": [c for c in cards if not c["env"]["active"]],
-        "total_envelopes": total, "cuadre": views.reconciliation(conn, total),
-        "checks": repo.checks(conn), "hoy": today(request).isoformat(),
+        "total_envelopes": total,
     })
 
 
-@router.post("/cuadre")
-async def add_check(request: Request, conn=Depends(get_db)):
+@router.get("/cuentas")
+def accounts_page(request: Request, conn=Depends(get_db)):
+    txs = repo.all_txs(conn)
+    tarjetas, total = views.accounts_overview(conn, txs, include_archived=True)
+    return render(request, "cuentas.html", {
+        "cards": [c for c in tarjetas if c["account"]["active"]],
+        "archived": [c for c in tarjetas if not c["account"]["active"]],
+        "total": total, "hoy": today(request).isoformat()})
+
+
+@router.get("/cuentas/{account_id:int}")
+def account_detail(request: Request, account_id: int, conn=Depends(get_db)):
+    cuenta = repo.get_row(conn, "accounts", account_id)
+    if not cuenta:
+        raise HTTPException(404, "Esa cuenta no existe")
+    txs = repo.all_txs(conn)
+    saldos = calc.account_balances(txs, repo.accounts(conn))
+    saldo = saldos.get(account_id, 0)
+    history, acumulado = [], cuenta["initial_balance"] or 0
+    for row in repo.tx_rows(conn, account_id=account_id, oldest_first=True):
+        delta = calc.account_moves(views.tx_de_fila(row)).get(account_id, 0)
+        acumulado += delta
+        history.append({"row": row, "delta": delta, "balance": acumulado})
+    history.reverse()
+    sobres = [e for e in repo.envelopes(conn) if e["account_id"] == account_id]
+    apartado = sum(calc.envelope_balances(txs).get(e["id"], 0) for e in sobres)
+    return render(request, "cuenta.html", {
+        "cuenta": cuenta, "balance": saldo, "in_envelopes": apartado, "free": saldo - apartado,
+        "sobres": sobres, "history": history, "checks": repo.checks(conn, account_id),
+        "cuadre": views.reconciliation(conn, account_id, saldo),
+        "hoy": today(request).isoformat(), "back": "/cuentas"})
+
+
+@router.post("/cuentas/{account_id:int}/comprobar")
+async def add_check(request: Request, account_id: int, conn=Depends(get_db)):
+    """Apunta el saldo que dice el banco, para ver si cuadra con el de la app."""
+    cuenta = repo.get_row(conn, "accounts", account_id)
+    if not cuenta:
+        raise HTTPException(404)
     form = await request.form()
-    error = None
+    error, balance, day = None, None, None
     try:
         balance = parse_amount(form.get("saldo"))
         if balance is None:
-            error = "Escribe el saldo que ves en la app de tu banco."
+            error = f"Escribe el saldo que ves en {cuenta['name']}."
     except InvalidAmount:
-        balance, error = None, "El saldo no es válido: escribe solo la cifra, por ejemplo 3003,70."
+        error = "El saldo no es válido: escribe solo la cifra, por ejemplo 1234,56."
     try:
         day = parse_date(form.get("fecha") or today(request).isoformat())
     except ValueError:
-        day, error = None, error or "La fecha no es válida."
-    if not error:
-        with conn:
-            repo.add_check(conn, day, balance)
-    txs = repo.all_txs(conn)
-    _, total = views.envelopes_overview(conn, txs)
-    ctx = {"cuadre": views.reconciliation(conn, total), "checks": repo.checks(conn),
-           "hoy": today(request).isoformat(), "total_envelopes": total, "cuadre_error": error,
-           "saldo_escrito": form.get("saldo") or ""}
-    if is_htmx(request):
-        return render(request, "partials/cuadre.html", ctx)
-    return redirect(request, "/sobres", error or "Saldo guardado", "error" if error else "ok")
-
-
-@router.post("/cuadre/{check_id:int}/borrar")
-def delete_check(request: Request, check_id: int, conn=Depends(get_db)):
+        error = error or "La fecha no es válida."
+    if error:
+        return redirect(request, f"/cuentas/{account_id}", error, "error")
     with conn:
-        conn.execute("DELETE FROM tr_checks WHERE id = ?", (check_id,))
-    return redirect(request, "/sobres#cuadre", "Saldo borrado")
+        repo.add_check(conn, account_id, day, balance)
+    return redirect(request, f"/cuentas/{account_id}", "Saldo apuntado")
+
+
+@router.post("/cuentas/{account_id:int}/ajustar-inicial")
+def adjust_initial(request: Request, account_id: int, conn=Depends(get_db)):
+    """Pone el saldo inicial que hace falta para que la cuenta cuadre con el banco.
+
+    Sirve para empezar: apuntas lo que dice el banco hoy y la app deduce lo que
+    había antes de tu primer movimiento.
+    """
+    cuenta = repo.get_row(conn, "accounts", account_id)
+    ultima = repo.last_check(conn, account_id) if cuenta else None
+    if not cuenta or not ultima:
+        return redirect(request, f"/cuentas/{account_id}",
+                        "Primero apunta el saldo que dice el banco.", "error")
+    hasta = date.fromisoformat(ultima["date"])
+    calculado = calc.account_balance_at(repo.all_txs(conn), account_id,
+                                        cuenta["initial_balance"] or 0, hasta)
+    diferencia = ultima["balance"] - calculado
+    if diferencia == 0:
+        return redirect(request, f"/cuentas/{account_id}", "Ya cuadraba: no he tocado nada.")
+    with conn:
+        conn.execute("UPDATE accounts SET initial_balance = initial_balance + ? WHERE id = ?",
+                     (diferencia, account_id))
+    return redirect(request, f"/cuentas/{account_id}",
+                    f"Saldo inicial ajustado en {eur(diferencia)}: ahora cuadra con el banco")
+
+
+@router.post("/cuentas/comprobaciones/{check_id:int}/borrar")
+def delete_check(request: Request, check_id: int, conn=Depends(get_db)):
+    fila = conn.execute("SELECT account_id FROM account_checks WHERE id = ?", (check_id,)).fetchone()
+    with conn:
+        conn.execute("DELETE FROM account_checks WHERE id = ?", (check_id,))
+    destino = f"/cuentas/{fila['account_id']}" if fila and fila["account_id"] else "/cuentas"
+    return redirect(request, destino, "Saldo borrado")
 
 
 @router.get("/sobres/{env_id:int}")
@@ -715,7 +790,7 @@ async def wipe(request: Request, conn=Depends(get_db)):
                         f"No he borrado nada: no pude hacer la copia de seguridad previa ({e}).", "error")
     with conn:
         conn.execute("DELETE FROM transactions")
-        conn.execute("DELETE FROM tr_checks")
+        conn.execute("DELETE FROM account_checks")
         if scope == "todo":
             conn.execute("DELETE FROM loans")
             conn.execute("DELETE FROM categories")
@@ -749,6 +824,10 @@ def catalog_fields(kind: str, form, errors: list) -> dict:
         fields["target"] = parse_optional_amount(form.get("objetivo"), "El objetivo", errors, allow_zero=False)
         fields["monthly"] = parse_optional_amount(form.get("aporte"), "El aporte mensual", errors, allow_zero=False)
         fields["note"] = (form.get("nota") or "").strip()[:200]
+        fields["account_id"] = int_or_none(form.get("cuenta"))
+    elif kind == "cuentas":
+        fields["initial_balance"] = parse_optional_amount(form.get("saldo_inicial"), "El saldo inicial",
+                                                          errors) or 0
     return fields
 
 

@@ -24,6 +24,12 @@
       {% for e in envelopes %}<option value="{{ e.id }}" {% if filters.sobre == e.id %}selected{% endif %}>{{ e.name }}{% if not e.active %} (archivado){% endif %}</option>{% endfor %}
     </select>
   </label>
+  <label><span class="sr">Cuenta</span>
+    <select name="cuenta">
+      <option value="">Todas las cuentas</option>
+      {% for a in accounts %}<option value="{{ a.id }}" {% if filters.cuenta == a.id %}selected{% endif %}>{{ a.name }}</option>{% endfor %}
+    </select>
+  </label>
   <label class="wide"><span class="sr">Categoría</span>
     <select name="categoria">
       <option value="">Todas las categorías</option>

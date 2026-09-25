@@ -62,17 +62,20 @@ def test_gasto_desde_sobre_no_cambia_el_libre(conn):
     assert calc.spent_by_category(txs, 2026, 9)[cats["Otros gastos"]] == 30000   # y el presupuesto sí lo cuenta
 
 
-def test_cuadre(conn):
+def test_cuadre_de_una_cuenta(conn):
+    """El saldo lo calcula la app; el cuadre solo comprueba si se te ha escapado algo."""
+    cuentas = ids(conn)[2]
+    ahorro = cuentas["Cuenta de ahorro"]
     apuntar(conn, "2026-09-01", calc.APORTE, 20000, sobre="Colchón", cuenta="Cuenta de ahorro")
-    apuntar(conn, "2026-09-02", calc.APORTE, 10000, sobre="Coche", cuenta="Cuenta de ahorro")
-    _, total = views.envelopes_overview(conn, repo.all_txs(conn))
+    tarjetas, _ = views.accounts_overview(conn, repo.all_txs(conn))
+    saldo = next(t["balance"] for t in tarjetas if t["account"]["id"] == ahorro)
     with conn:
-        repo.add_check(conn, date(2026, 9, 19), total)
-    assert views.reconciliation(conn, total)["r"].message == "Todo apuntado"
+        repo.add_check(conn, ahorro, date(2026, 9, 19), saldo)
+    assert views.reconciliation(conn, ahorro, saldo)["r"].message == "Cuadra con el banco"
 
     with conn:                                       # 5 € de intereses sin apuntar
-        repo.add_check(conn, date(2026, 9, 20), total + 500)
-    cuadre = views.reconciliation(conn, total)["r"]
+        repo.add_check(conn, ahorro, date(2026, 9, 20), saldo + 500)
+    cuadre = views.reconciliation(conn, ahorro, saldo)["r"]
     assert cuadre.level == "sobra" and "intereses" in cuadre.message
 
 

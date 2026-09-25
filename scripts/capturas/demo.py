@@ -10,6 +10,8 @@ conn = db.connect(RUTA)
 seed.seed(conn)
 with conn:
     repo.set_setting(conn, "start_month", "2026-08-01")   # para que se vean las sobras de agosto
+    conn.execute("UPDATE accounts SET initial_balance = 120000 WHERE name = 'Cuenta corriente'")
+    conn.execute("UPDATE accounts SET initial_balance = 25000 WHERE name = 'Cuenta de ahorro'")
 cats = {r["name"]: r["id"] for r in repo.categories(conn)}
 envs = {r["name"]: r["id"] for r in repo.envelopes(conn)}
 accs = {r["name"]: r["id"] for r in repo.accounts(conn)}
@@ -33,11 +35,14 @@ MOV = [
     ("2026-10-02", "gasto", "Casa", None, "Cuenta corriente", "Alquiler", 50000),
     ("2026-10-03", "aporte_sobre", None, "Coche", "Cuenta de ahorro", "Aporte del mes", 10000),
     ("2026-10-05", "gasto", "Ocio", None, "Cuenta corriente", "Escape room", 9000),
+    ("2026-09-04", "traspaso", None, None, "Cuenta de ahorro", "Traspaso al ahorro", 20000),
 ]
 with conn:
+    corriente = accs["Cuenta corriente"]
     for fecha, tipo, cat, env, acc, concepto, importe in MOV:
+        otra = corriente if tipo in ("traspaso", "aporte_sobre") and accs[acc] != corriente else None
         repo.insert_tx(conn, date=fecha, type=tipo, category_id=cats.get(cat), envelope_id=envs.get(env),
-                       account_id=accs[acc], concept=concepto, amount=importe)
-    repo.add_check(conn, __import__("datetime").date(2026, 9, 19), 336470)
+                       account_id=accs[acc], other_account_id=otra, concept=concepto, amount=importe)
+    repo.add_check(conn, accs["Cuenta de ahorro"], __import__("datetime").date(2026, 9, 19), 66470)
 print("demo lista:", sum(calc.envelope_balances(repo.all_txs(conn)).values()))
 conn.close()

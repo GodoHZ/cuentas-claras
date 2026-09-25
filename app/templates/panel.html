@@ -74,13 +74,26 @@
   <h2>Sobres</h2>
   <a class="more" href="/sobres">Ver todos ›</a>
 </section>
-<div class="card total-card">
-  <p class="label">Total en sobres</p>
-  <p class="stat-num num">{{ total_envelopes|eur }}</p>
-  <p class="hint">Todo el dinero que tienes apartado en tus sobres (en {{ envelope_account }}).</p>
-</div>
 <div class="env-grid">
   {% for c in cards %}{{ envelope_card(c) }}{% endfor %}
+</div>
+
+<section class="section-head">
+  <h2>Cuentas</h2>
+  <a class="more" href="/cuentas">Ver todas ›</a>
+</section>
+<div class="card">
+  <ul class="plain">
+    {% for c in cuentas %}
+    <li class="row-between">
+      <a href="/cuentas/{{ c.account.id }}">{{ c.account.name }}</a>
+      <span class="num">{{ c.balance|eur }}{% if c.in_envelopes %} <small class="muted">· libre {{ c.free|eur }}</small>{% endif %}</span>
+    </li>
+    {% endfor %}
+    <li class="row-between strong"><span>Total</span><span class="num">{{ total_cuentas|eur }}</span></li>
+  </ul>
+  <p class="hint">Lo que hay en cada cuenta, calculado con tus movimientos. «Libre» es lo que queda
+    después de lo que tienes apartado en sobres.</p>
 </div>
 
 <section class="stats two">
@@ -89,16 +102,10 @@
     <p class="stat-num num">{{ debts.ratio|pct1 }}</p>
     <p class="hint">Parte de tu nómina que se va en cuotas de préstamos. Te avisa por encima del {{ debts.limit|pct }}.</p>
   </a>
-  <a class="card stat cuadre-mini level-{{ cuadre.r.level if cuadre else 'sin' }}" href="/sobres#cuadre">
-    <p class="label">Cuadre con {{ envelope_account }}</p>
-    {% if cuadre %}
-    <p class="stat-msg">{{ icono_nivel(cuadre.r.level) }} {{ cuadre.r.message }}</p>
-    <p class="hint">Comparado con el saldo que escribiste el {{ cuadre.check.date|fecha }}.</p>
-    {% else %}
-    <p class="stat-msg">Sin comprobar</p>
-    <p class="hint">Escribe el saldo de {{ envelope_account }} en Sobres.</p>
-    {% endif %}
+  <a class="card stat" href="/sobres">
+    <p class="label">Total en sobres</p>
+    <p class="stat-num num">{{ total_envelopes|eur }}</p>
+    <p class="hint">Dinero que tienes apartado para algo concreto.</p>
   </a>
 </section>
-</div>
 {% endblock %}

@@ -3,7 +3,8 @@
 {% set e, st = c.env, c.st %}
 <{{ 'a' if link else 'div' }} class="card env-card{{ ' done' if st.done }}" {% if link %}href="/sobres/{{ e.id }}"{% endif %}>
   <div class="env-top">
-    <span class="env-name">{{ e.name }}{% if not e.active %} <span class="badge">archivado</span>{% endif %}</span>
+    <span class="env-name">{{ e.name }}{% if not e.active %} <span class="badge">archivado</span>{% endif %}
+      {%- if c.account %} <small class="muted">en {{ c.account }}</small>{% endif %}</span>
     <span class="env-balance num">{{ st.balance|eur }}</span>
   </div>
   {% if st.target %}
@@ -36,9 +37,10 @@
   <span class="tx-main">
     <span class="tx-title">{{ r.concept or r.category or r.envelope }}</span>
     <span class="tx-sub">
-      {%- if r.type == 'aporte_sobre' %}Aporte a «{{ r.envelope }}»
-      {%- elif r.type == 'retiro_sobre' %}Retiro de «{{ r.envelope }}»
-      {%- else %}{{ r.category }}{% if r.envelope %} · desde «{{ r.envelope }}»{% endif %}{% endif %} · {{ r.account }}
+      {%- if r.type == 'traspaso' %}{{ r.other_account }} → {{ r.account }}
+      {%- elif r.type == 'aporte_sobre' %}Aporte a «{{ r.envelope }}»{% if r.other_account %} · desde {{ r.other_account }}{% else %} · {{ r.account }}{% endif %}
+      {%- elif r.type == 'retiro_sobre' %}Retiro de «{{ r.envelope }}»{% if r.other_account %} · a {{ r.other_account }}{% else %} · {{ r.account }}{% endif %}
+      {%- else %}{{ r.category }}{% if r.envelope %} · desde «{{ r.envelope }}»{% endif %} · {{ r.account }}{% endif %}
     </span>
   </span>
   <span class="tx-amount num">
