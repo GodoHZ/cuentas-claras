@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% from "_iconos.html" import icono, icono_nivel %}
+{% block title %}Bancos · Finanzas{% endblock %}
+{% block heading %}Bancos{% endblock %}
+{% block main %}
+<p class="hint">La app trae sola los movimientos de tus bancos cada pocas horas. Lo que ya hayas apuntado a mano lo
+  reconoce por el importe y la fecha y no lo duplica; un traspaso entre dos cuentas tuyas lo apunta como traspaso;
+  y lo que no sabe clasificar te lo deja «por revisar». Si borras algo que vino del banco, no vuelve.</p>
+
+<section class="card stack">
+  <h2>1. Tu aplicación de Enable Banking</h2>
+  {% if configured %}<p class="level-ok">{{ icono_nivel('ok') }} Configurada.</p>{% endif %}
+  <form method="post" action="/banco/config" enctype="multipart/form-data" class="stack" hx-boost="false">
+    <label class="legend" for="app-id">App ID</label>
+    <input id="app-id" name="app_id" value="{{ app_id }}" autocomplete="off" spellcheck="false"
+           placeholder="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee">
+    <label class="legend" for="clave">Clave privada: el fichero .pem que se descargó al registrarla</label>
+    <input id="clave" name="clave" type="file" accept=".pem,application/x-pem-file,text/plain">
+    {% if key_ok %}<p class="hint">Ya hay una clave guardada. Sube otra solo si la cambias.</p>{% endif %}
+    <button class="btn btn-primary" type="submit">Guardar</button>
+  </form>
+  <p class="hint">Al registrar la aplicación, en «Redirect URLs» tiene que estar exactamente esta dirección:</p>
+  <code class="copiable">{{ redirect_url }}</code>
+  <p class="hint">La clave se guarda fuera de la base de datos, solo legible por la app. Con ella solo se pueden
+    leer movimientos y saldos de las cuentas a las que tú des permiso: no se puede mover dinero.</p>
+</section>
+
+<section class="section-head"><h2>2. Tus bancos</h2></section>
+{% for c in conexiones %}
+{% set l = c.link %}
+<section class="card stack">
+  <div class="row-between"><h3>{{ l.aspsp_name }}</h3>
+    {% if not l.session_id %}<span class="badge">sin terminar</span>
+    {% elif c.expired %}<span class="badge badge-revisar">caducado</span>
+    {% else %}<span class="badge">conectado</span>{% endif %}</div>
+
+  {% if not l.session_id %}
+  <p class="hint">El banco no llegó a dar permiso. Vuelve a conectar.</p>
+  {% elif c.expired %}
+  <p class="hint level-pasado">{{ icono_nivel('pasado') }} El permiso caducó el {{ c.until.strftime('%d/%m/%Y') }}.
+    Vuelve a conectar para renovarlo: no se duplicará nada.</p>
+  {% elif c.until %}
+  <p class="hint">Permiso hasta el {{ c.until.strftime('%d/%m/%Y') }}. Antes de esa fecha te avisaré en el panel
+    para que lo renueves.</p>
+  {% endif %}
+  {% if c.last_sync %}<p class="hint">Última sincronización: {{ c.last_sync.strftime('%d/%m/%Y a las %H:%M') }}.</p>{% endif %}
+  {% if l.last_error %}<div class="alert alert-error">{{ l.last_error }}</div>{% endif %}
+
+  {% for a in c.accounts %}
+  <form method="post" action="/banco/cuenta" class="stack banco-cuenta">
+    <input type="hidden" name="ident" value="{{ a.ident }}">
+    <p><strong>{{ a.name }}</strong>
+      {% if a.iban %}<span class="muted num">{{ a.iban[:4] }} … {{ a.iban[-4:] }}</span>{% endif %}</p>
+    <div class="field-row">
+      <div class="stack">
+        <label class="legend" for="cta-{{ loop.index }}-{{ l.id }}">Se apunta en</label>
+        <select id="cta-{{ loop.index }}-{{ l.id }}" name="cuenta">
+          <option value="">No traer esta cuenta</option>
+          {% for x in cuentas %}<option value="{{ x.id }}" {% if a.account_id == x.id %}selected{% endif %}>{{ x.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="stack">
+        <label class="legend" for="des-{{ loop.index }}-{{ l.id }}">Traer desde</label>
+        <input id="des-{{ loop.index }}-{{ l.id }}" type="date" name="desde" value="{{ a.since }}">
+      </div>
+    </div>
+    <button class="btn btn-small" type="submit">Guardar</button>
+  </form>
+  {% else %}
+  {% if l.session_id %}<p class="hint">El banco no ha compartido ninguna cuenta.</p>{% endif %}
+  {% endfor %}
+  {% if c.accounts %}<p class="hint">«Traer desde»: la primera vez se traen los movimientos desde esa fecha. Si
+    pones una fecha antigua, lo que ya tenías apuntado a mano se reconoce y no se duplica.</p>{% endif %}
+
+  <div class="row-actions">
+    {% if l.session_id and not c.expired %}
+    <form method="post" action="/banco/{{ l.id }}/sincronizar">
+      <button class="btn btn-primary btn-small" type="submit">Sincronizar ahora</button></form>
+    {% endif %}
+    <form method="post" action="/banco/conectar" hx-boost="false">
+      <input type="hidden" name="nombre" value="{{ l.aspsp_name }}">
+      <input type="hidden" name="pais" value="{{ l.aspsp_country }}">
+      <button class="btn btn-small" type="submit">{{ 'Renovar permiso' if l.session_id else 'Volver a conectar' }}</button></form>
+    <form method="post" action="/banco/{{ l.id }}/quitar"
+          hx-confirm="¿Quitar la conexión con {{ l.aspsp_name }}? Lo que ya se trajo se queda en la app.">
+      <button class="link danger" type="submit">Quitar</button></form>
+  </div>
+</section>
+{% else %}
+<div class="empty"><p>Todavía no has conectado ningún banco.</p></div>
+{% endfor %}
+
+{% if configured %}
+<a class="btn btn-primary btn-block" href="/banco/conectar">Conectar un banco</a>
+{% else %}
+<p class="muted small center">Para conectar un banco, primero guarda el App ID y la clave (paso 1).</p>
+{% endif %}
+
+<section class="card stack">
+  <h2>Lo que no sé clasificar</h2>
+  <p class="hint">La primera vez que aparece un comercio nuevo, lo apunto en esta categoría y lo dejo «por revisar».
+    Cuando lo corrijas, ese comercio irá siempre a la categoría que elijas.</p>
+  <form method="post" action="/banco/por-si-acaso" class="stack">
+    <label class="legend" for="por-si-acaso">Categoría por si acaso</label>
+    <select id="por-si-acaso" name="por_si_acaso">
+      {% for cat in categories %}<option value="{{ cat.id }}" {% if por_si_acaso == cat.id %}selected{% endif %}>{{ cat.name }}</option>{% endfor %}
+    </select>
+    <button class="btn btn-small" type="submit">Guardar</button>
+  </form>
+</section>
+{% endblock %}

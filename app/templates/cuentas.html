@@ -13,7 +13,8 @@
 {% for c in cards %}
 <a class="card cuenta-card" href="/cuentas/{{ c.account.id }}">
   <div class="env-top">
-    <span class="env-name">{{ c.account.name }}</span>
+    <span class="env-name">{{ c.account.name }}
+      {%- if not c.account.spendable %} <span class="badge">no suma</span>{% endif %}</span>
     <span class="env-balance num">{{ c.balance|eur }}</span>
   </div>
   {% if c.in_envelopes %}
@@ -48,6 +49,7 @@
 {% endfor %}
 {% endif %}
 
-<p class="muted small">Para crear cuentas, renombrarlas o cambiar su saldo inicial:
+<p class="muted small">Las marcadas «no suma» no entran en el «puedes gastar» del panel: su dinero es tuyo,
+  pero no es para el día a día. Para crear cuentas, renombrarlas, cambiar su saldo inicial o esa marca:
   <a href="/ajustes?abierto=cuentas#cuentas">Ajustes › Cuentas</a>.</p>
 {% endblock %}

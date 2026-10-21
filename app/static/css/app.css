@@ -172,7 +172,24 @@ a.card:active { transform: scale(.995); }
 .stat-num { font-size: 25px; font-weight: 700; margin: 4px 0 0; letter-spacing: -.02em; }
 .stat-num .of { font-size: 15px; font-weight: 500; color: var(--ink-2); }
 .stat-msg { font-size: 16px; font-weight: 600; margin: 4px 0 0; }
+/* el libre del mes adelantando lo que todavía está por pagar o por guardar */
+.hero-extra { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: baseline;
+              margin: 12px 0 0; padding-top: 10px; border-top: 1px solid var(--line); font-size: 14px; }
+.hero-extra dt { color: var(--ink-2); }
+.hero-extra dd { margin: 0; text-align: right; }
+.cuentas-linea { display: flex; flex-wrap: wrap; gap: 2px 14px; margin: 6px 0 0;
+                 font-size: 13px; color: var(--ink-2); }
+.previsto-linea { display: flex; align-items: baseline; gap: 10px; }
+.previsto-que { flex: 1; min-width: 0; }
+.previsto-que small { display: block; font-size: 12px; margin-left: 1.65em; }
+.previsto-num { font-weight: 600; }
+.previsto-linea.hecho, .previsto-linea.hecho .previsto-que small { color: var(--muted); }
+.previsto-ok { font-size: 13px; }
+.previsto .link { padding: 0 2px; }
+
 .stats { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); }
+/* si la última tarjeta se queda sola en su fila, que ocupe el ancho entero */
+.stats > .stat:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .stats.two { grid-template-columns: 1fr; }
 .total-card .hero-num { color: var(--env); }
 
@@ -343,6 +360,21 @@ table.data.small { font-size: 12px; }
 .alert { border-radius: 10px; padding: 10px 12px; font-size: 14px; margin: 0 0 10px; }
 .alert-error { background: var(--crit-bg); color: var(--crit); }
 .alert-warn { background: var(--warn-bg); color: var(--ink); }
+/* movimientos que la app apunta sola */
+.aviso-revisar { display: flex; gap: 10px; align-items: flex-start; text-decoration: none; color: var(--ink);
+                 background: var(--warn-bg); }
+.aviso-revisar .ico { margin-top: .15em; color: #8a6100; }
+.aviso-revisar strong { display: block; }
+.badge-revisar { background: var(--warn-bg); color: #8a6100; font-weight: 600; vertical-align: 1px; }
+code.copiable { display: block; padding: 6px 8px; border-radius: 8px; background: var(--surface-2);
+                font-size: 12px; overflow-wrap: anywhere; user-select: all; }
+/* bancos */
+.banco-cuenta { border-top: 1px solid var(--line); padding-top: 10px; }
+.banco-boton { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%;
+               background: none; border: 0; padding: 12px 4px; font: inherit; color: var(--ink);
+               text-align: left; cursor: pointer; border-bottom: 1px solid var(--line); }
+.banco-item:last-child .banco-boton { border-bottom: 0; }
+.filtro { width: 100%; margin: 0 0 10px; }
 .flash { border-radius: 10px; padding: 10px 12px; font-size: 14px; background: var(--surface-2);
          display: flex; align-items: flex-start; gap: 8px; }
 .flash .ico { margin-top: .15em; }

@@ -35,7 +35,8 @@
 <a class="tx tx-{{ r.type }}" href="/movimientos/{{ r.id }}">
   <span class="tx-dot" aria-hidden="true"></span>
   <span class="tx-main">
-    <span class="tx-title">{{ r.concept or r.category or r.envelope }}</span>
+    <span class="tx-title">{{ r.concept or r.category or r.envelope }}
+      {%- if r.review %} <span class="badge badge-revisar">revisar</span>{% endif %}</span>
     <span class="tx-sub">
       {%- if r.type == 'traspaso' %}{{ r.other_account }} → {{ r.account }}
       {%- elif r.type == 'aporte_sobre' %}Aporte a «{{ r.envelope }}»{% if r.other_account %} · desde {{ r.other_account }}{% else %} · {{ r.account }}{% endif %}

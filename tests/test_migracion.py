@@ -90,8 +90,17 @@ def test_de_la_version_2_a_cuentas_con_saldo(tmp_path):
         assert movimientos[0]["other_account_id"] is None      # antes no existía: solo etiqueta
         # los sobres pasan a vivir en la cuenta que estaba marcada para ellos
         assert repo.envelopes(conn)[0]["account_id"] == 2
-        # las cuentas estrenan saldo inicial a cero
+        # las cuentas estrenan saldo inicial a cero y cuentan todas para el día a día
         assert all(a["initial_balance"] == 0 for a in repo.accounts(conn))
+        assert all(a["spendable"] == 1 for a in repo.accounts(conn))
+        # y los préstamos estrenan la categoría con la que se apunta su cuota
+        assert "category_id" in {r["name"] for r in conn.execute("PRAGMA table_info(loans)")}
+        # los movimientos de antes son todos «a mano» y no hay nada por revisar
+        assert all(m["source"] is None and m["review"] == 0 for m in movimientos)
+        assert repo.review_count(conn) == 0
+        # y están las tablas de la conexión con el banco, vacías
+        tablas = {r["name"] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        assert {"bank_links", "bank_accounts", "bank_refs"} <= tablas
         # los saldos escritos a mano se guardan como comprobaciones de esa cuenta
         comprobaciones = repo.checks(conn, 2)
         assert len(comprobaciones) == 1 and comprobaciones[0]["balance"] == 36370

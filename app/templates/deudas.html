@@ -13,6 +13,15 @@
   </p>
 </div>
 
+{% if d.month_total %}
+<div class="card">
+  <div class="row-between"><span class="label">Cuotas de este mes</span><span class="num">{{ d.month_total|eur }}</span></div>
+  <div class="row-between strong"><span>Sin apuntar todavía</span><span class="num">{{ d.month_pending|eur }}</span></div>
+  <p class="hint">Lo que queda por apuntar se descuenta del libre del mes en el panel, en «previsto»: así el dinero
+    que ya tiene dueño no parece disponible a principio de mes.</p>
+</div>
+{% endif %}
+
 {% for item in d.loans %}
 {% set l, st = item.loan, item.st %}
 <section class="card loan">
@@ -24,9 +33,17 @@
   <dl class="cuadre-table">
     <dt>Primera cuota</dt><dd>{{ st.first|fecha }}</dd>
     <dt>Última cuota</dt><dd>{{ st.last|fecha }}</dd>
+    {% if item.month %}
+    <dt>Cuota de este mes</dt>
+    <dd class="num">{{ item.month.expected|eur }} · día {{ item.month.day }} ·
+      {% if item.month.paid %}apuntada{% else %}<strong>sin apuntar</strong>{% endif %}</dd>
+    {% endif %}
     <dt>Total pendiente</dt><dd class="num strong">{{ st.pending_total|eur }}</dd>
   </dl>
-  <p class="hint">Total pendiente = cuotas que quedan × cuota mensual. No descuenta intereses ni amortizaciones.</p>
+  <p class="hint">Total pendiente = cuotas que quedan × cuota mensual. No descuenta intereses ni amortizaciones.
+    {% if item.category %}La cuota la apuntas con la categoría «{{ item.category.name }}».
+    {% else %}Este préstamo no tiene categoría: la cuota se da por pagada cuando pasa su día. Si le pones una en
+      <a href="/ajustes?abierto=prestamos#prestamos">Ajustes › Préstamos</a>, la app sabrá si ya la has apuntado.{% endif %}</p>
 </section>
 {% else %}
 <div class="empty"><p>No tienes préstamos apuntados.</p>

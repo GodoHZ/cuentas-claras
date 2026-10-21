@@ -12,6 +12,7 @@
 <form class="filters" action="/movimientos" method="get"
       hx-get="/movimientos" hx-trigger="change" hx-target="#main" hx-select="#main" hx-swap="outerHTML" hx-push-url="true">
   <input type="hidden" name="mes" value="{{ 'todos' if all_months else month_key(year, month) }}">
+  {% if filters.revisar %}<input type="hidden" name="revisar" value="1">{% endif %}
   <label><span class="sr">Tipo</span>
     <select name="tipo">
       <option value="">Todos los tipos</option>
@@ -43,6 +44,11 @@
   {% else %}<a href="/movimientos?mes=todos{{ ('&' ~ filter_qs) if filter_qs }}">Ver todos los meses</a>{% endif %}
   {% if filtered %} · <a href="/movimientos?mes={{ 'todos' if all_months else month_key(year, month) }}">Quitar filtros</a>{% endif %}
 </p>
+
+{% if filters.revisar %}
+<p class="note">Gastos que la app apuntó sola en un sitio nuevo, con la categoría supuesta. Toca uno, cámbiala
+  si no es la buena y dale a Guardar: a partir de ahí, ese comercio irá siempre a esa categoría.</p>
+{% endif %}
 
 {% if m and not filtered %}
 <p class="month-line">Ingresos <b class="num">{{ m.income|eur }}</b> · Gastos <b class="num">{{ m.payroll_spent|eur }}</b> · Aportado <b class="num">{{ m.saved|eur }}</b></p>

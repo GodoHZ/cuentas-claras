@@ -12,16 +12,16 @@ import re
 import secrets
 import sqlite3
 from contextlib import asynccontextmanager
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import quote, unquote, urlencode
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import backup, calc, config, db, export, importer, pin, repo, seed, views
+from . import backup, banco, calc, clasificar, config, db, export, importer, pin, repo, seed, views
 from .money import (InvalidAmount, amount_input, eur, fmt_date, long_day, month_key, month_name,
                     month_short, parse_amount, parse_date, parse_month, pct, add_months_ym)
 
@@ -31,7 +31,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 OPEN_PATHS = {"/pin", "/salud", "/manifest.webmanifest", "/sw.js", "/offline"}
 NAV = [("/", "inicio"), ("/movimientos", "movimientos"), ("/sobres", "sobres"),
        ("/presupuesto", "presupuesto"), ("/resumen", "mas"), ("/deudas", "mas"),
-       ("/ajustes", "mas"), ("/mas", "mas")]
+       ("/ajustes", "mas"), ("/mas", "mas"), ("/banco", "mas")]
 
 templates = Jinja2Templates(directory=str(config.BASE_DIR / "templates"))
 templates.env.filters.update(
@@ -149,6 +149,12 @@ async def backup_loop(app: FastAPI) -> None:
         except Exception:  # noqa: BLE001 - que no pare el bucle de copias
             log.exception("Fallo guardando las sobras del mes")
         try:
+            resumen = await asyncio.to_thread(run_bank_sync, app.state.db_path, app.state.today())
+            if resumen:
+                log.info("Banco: %s", resumen)
+        except Exception:  # noqa: BLE001 - que un fallo del banco no pare las copias
+            log.exception("Fallo sincronizando con el banco")
+        try:
             keep_days = await asyncio.to_thread(backup_keep_days, app.state.db_path)
             path = await asyncio.to_thread(backup.daily_backup_if_needed, app.state.db_path,
                                            app.state.backup_dir, config.now(), keep_days)
@@ -159,6 +165,21 @@ async def backup_loop(app: FastAPI) -> None:
             log.exception("Fallo en la copia diaria")
             app.state.backup_error = f"{config.now():%d/%m/%Y %H:%M}: {e}"
         await asyncio.sleep(app.state.backup_interval)
+
+
+def run_bank_sync(path: Path, today_: date) -> str | None:
+    """Sincroniza con el banco si toca (cada 6 horas). Devuelve un resumen o None."""
+    conn = db.connect(path)
+    try:
+        if not banco.configured(conn) or not banco.links(conn) or not banco.auto_sync_due(conn):
+            return None
+        resultados = banco.sync_all(conn, banco.Client.from_settings(conn), today_)
+        with conn:
+            repo.set_setting(conn, "bank_last_auto_sync",
+                             datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+        return "; ".join(f"{nombre}: {banco.summary_text(r)}" for nombre, r in resultados) or None
+    finally:
+        conn.close()
 
 
 def backup_keep_days(path: Path) -> int:
@@ -273,10 +294,17 @@ def panel(request: Request, mes: str = "", conn=Depends(get_db)):
     txs = repo.all_txs(conn)
     cards, total = views.envelopes_overview(conn, txs)
     cuentas, total_cuentas = views.accounts_overview(conn, txs)
+    es_actual = (year, month) == (hoy.year, hoy.month)
+    fuera = [c["account"]["name"] for c in cuentas if not c["account"]["spendable"]]
     return render(request, "panel.html", {
         "sweep": views.pending_sweep(conn, txs, hoy),
         "cuentas": cuentas, "total_cuentas": total_cuentas,
-        "year": year, "month": month, "is_current": (year, month) == (hoy.year, hoy.month),
+        # adelantar lo que falta por pagar solo tiene sentido en el mes en curso
+        "forecast": views.forecast(conn, txs, year, month, hoy) if es_actual else None,
+        "fuera_de_la_suma": fuera,
+        "por_revisar": repo.review_count(conn),
+        "banco_caduca": banco.expiring(conn),
+        "year": year, "month": month, "is_current": es_actual,
         "m": calc.month_summary(txs, year, month),
         "cards": cards, "total_envelopes": total,
         "debts": views.debts(conn, txs, hoy),
@@ -390,7 +418,7 @@ def sweep_now(request: Request, conn=Depends(get_db)):
 
 @router.get("/movimientos")
 def tx_list(request: Request, mes: str = "", tipo: str = "", categoria: str = "", sobre: str = "",
-            cuenta: str = "", conn=Depends(get_db)):
+            cuenta: str = "", revisar: str = "", conn=Depends(get_db)):
     hoy = today(request)
     all_months = mes == "todos"
     year, month = parse_month(mes, (hoy.year, hoy.month))
@@ -398,8 +426,9 @@ def tx_list(request: Request, mes: str = "", tipo: str = "", categoria: str = ""
     cat_id, env_id, acc_id = int_or_none(categoria), int_or_none(sobre), int_or_none(cuenta)
     rows = repo.tx_rows(conn, month=None if all_months else (year, month), type_=type_,
                         category_id=cat_id, envelope_id=env_id, account_id=acc_id,
-                        limit=1000 if all_months else None)
-    filters = {"tipo": type_ or "", "categoria": cat_id or "", "sobre": env_id or "", "cuenta": acc_id or ""}
+                        limit=1000 if all_months else None, review=bool(revisar))
+    filters = {"tipo": type_ or "", "categoria": cat_id or "", "sobre": env_id or "", "cuenta": acc_id or "",
+               "revisar": "1" if revisar else ""}
     return render(request, "movimientos.html", {
         "rows": rows, "year": year, "month": month, "all_months": all_months,
         "filters": filters, "filtered": any(filters.values()),
@@ -495,7 +524,7 @@ def account_detail(request: Request, account_id: int, conn=Depends(get_db)):
     return render(request, "cuenta.html", {
         "cuenta": cuenta, "balance": saldo, "in_envelopes": apartado, "free": saldo - apartado,
         "sobres": sobres, "history": history, "checks": repo.checks(conn, account_id),
-        "cuadre": views.reconciliation(conn, account_id, saldo),
+        "cuadre": views.reconciliation(conn, cuenta, txs),
         "hoy": today(request).isoformat(), "back": "/cuentas"})
 
 
@@ -828,6 +857,9 @@ def catalog_fields(kind: str, form, errors: list) -> dict:
     elif kind == "cuentas":
         fields["initial_balance"] = parse_optional_amount(form.get("saldo_inicial"), "El saldo inicial",
                                                           errors) or 0
+        # la marca distingue "lo ha desmarcado" de "este formulario no lo pregunta"
+        if form.get("pregunta_gastar"):
+            fields["spendable"] = 1 if form.get("gastar") else 0
     return fields
 
 
@@ -933,7 +965,8 @@ def loan_fields(form, errors: list) -> dict:
     count = int_or_none(form.get("cuotas"))
     if not count or count <= 0:
         errors.append("El número de cuotas tiene que ser mayor que 0.")
-    return {"name": name, "installment": installment, "first_date": first, "n_installments": count}
+    return {"name": name, "installment": installment, "first_date": first, "n_installments": count,
+            "category_id": int_or_none(form.get("categoria_id"))}
 
 
 @router.post("/ajustes/prestamos")
@@ -1155,3 +1188,161 @@ def offline(request: Request):
 
 
 app = create_app()
+
+
+# ---- Bancos (Enable Banking)
+
+def bank_redirect_url(request: Request) -> str:
+    """La dirección a la que vuelve el banco. Hay que darla de alta tal cual en Enable Banking."""
+    return str(request.base_url).rstrip("/") + "/banco/vuelta"
+
+
+def _local(texto: str | None):
+    if not texto:
+        return None
+    try:
+        return banco._parse_dt(texto).astimezone(config.TZ)
+    except ValueError:
+        return None
+
+
+@router.get("/banco")
+def bank_page(request: Request, conn=Depends(get_db)):
+    ahora = datetime.now(timezone.utc)
+    conexiones = []
+    for link in banco.links(conn):
+        hasta = _local(link["valid_until"])
+        conexiones.append({
+            "link": link, "accounts": banco.accounts_of(conn, link["id"]),
+            "until": hasta, "expired": bool(hasta and hasta <= ahora),
+            "last_sync": _local(link["last_sync"]),
+        })
+    return render(request, "banco.html", {
+        "app_id": repo.setting(conn, "bank_app_id") or "",
+        "key_ok": banco.key_path().is_file(),
+        "configured": banco.configured(conn),
+        "redirect_url": bank_redirect_url(request),
+        "conexiones": conexiones,
+        "cuentas": repo.accounts(conn, active=True),
+        "categories": repo.categories(conn, active=True, kind="gasto"),
+        "por_si_acaso": clasificar.fallback_category(conn),
+        "back": "/mas",
+    })
+
+
+@router.post("/banco/config")
+async def bank_config(request: Request, app_id: str = Form(""), clave: UploadFile | None = File(None),
+                      conn=Depends(get_db)):
+    app_id = app_id.strip()
+    if not app_id:
+        return redirect(request, "/banco", "Escribe el App ID de tu aplicación de Enable Banking.", "error")
+    if clave is not None and clave.filename:
+        contenido = await clave.read()
+        try:
+            banco.save_key(contenido)
+        except banco.BankError as e:
+            return redirect(request, "/banco", str(e), "error")
+    with conn:
+        repo.set_setting(conn, "bank_app_id", app_id)
+    if not banco.key_path().is_file():
+        return redirect(request, "/banco", "Guardado el App ID. Falta subir la clave (.pem).", "error")
+    return redirect(request, "/banco", "Configuración guardada")
+
+
+
+@router.get("/banco/conectar")
+def bank_choose(request: Request, conn=Depends(get_db)):
+    if not banco.configured(conn):
+        return redirect(request, "/banco", "Primero guarda el App ID y la clave.", "error")
+    client = banco.Client.from_settings(conn)
+    bancos, error = [], None
+    try:
+        for pais in ("ES", "DE"):
+            bancos += [dict(a, pais=pais) for a in client.aspsps(pais)]
+    except banco.BankError as e:
+        error = str(e)
+    bancos.sort(key=lambda a: (a["pais"] != "ES", a.get("name", "").lower()))
+    return render(request, "banco_conectar.html", {"bancos": bancos, "error": error, "back": "/banco"})
+
+
+@router.post("/banco/conectar")
+async def bank_start(request: Request, conn=Depends(get_db)):
+    form = await request.form()
+    nombre, pais = (form.get("nombre") or "").strip(), (form.get("pais") or "").strip()
+    if not nombre or not pais:
+        return redirect(request, "/banco/conectar", "Elige un banco.", "error")
+    try:
+        url = banco.start_connection(conn, banco.Client.from_settings(conn), nombre, pais,
+                                     bank_redirect_url(request), int_or_none(form.get("max")))
+    except banco.BankError as e:
+        return redirect(request, "/banco", str(e), "error")
+    return RedirectResponse(url, status_code=303)          # a la web del banco, fuera de HTMX
+
+
+@router.get("/banco/vuelta")
+def bank_return(request: Request, code: str = "", state: str = "", error: str = "",
+                error_description: str = "", conn=Depends(get_db)):
+    if error or not code:
+        with conn:
+            conn.execute("DELETE FROM bank_links WHERE state = ? AND session_id IS NULL", (state,))
+        motivo = error_description or error or "el banco no ha devuelto el permiso"
+        return redirect(request, "/banco", f"No se ha conectado: {motivo}.", "error")
+    try:
+        client = banco.Client.from_settings(conn)
+        link = banco.finish_connection(conn, client, code, state, today(request))
+        resumen = banco.sync_link(conn, client, link, today(request))
+    except banco.BankError as e:
+        return redirect(request, "/banco", str(e), "error")
+    return redirect(request, "/banco", f"{link['aspsp_name']} conectado. Mira en qué cuenta va cada una y desde "
+                                       f"qué fecha traer movimientos. {banco.summary_text(resumen)}.")
+
+
+@router.post("/banco/cuenta")
+async def bank_account_save(request: Request, conn=Depends(get_db)):
+    form = await request.form()
+    ident = form.get("ident") or ""
+    cuenta = conn.execute("SELECT * FROM bank_accounts WHERE ident = ?", (ident,)).fetchone()
+    if not cuenta:
+        raise HTTPException(404)
+    try:
+        desde = parse_date(form.get("desde")).isoformat()
+    except ValueError:
+        return redirect(request, "/banco", "La fecha no es válida.", "error")
+    destino = int_or_none(form.get("cuenta"))
+    if destino and not repo.get_row(conn, "accounts", destino):
+        destino = None
+    with conn:
+        conn.execute("UPDATE bank_accounts SET account_id = ?, since = ? WHERE ident = ?", (destino, desde, ident))
+    return redirect(request, "/banco", "Guardado. Se aplicará en la próxima sincronización.")
+
+
+@router.post("/banco/{link_id:int}/sincronizar")
+def bank_sync_now(request: Request, link_id: int, conn=Depends(get_db)):
+    link = conn.execute("SELECT * FROM bank_links WHERE id = ?", (link_id,)).fetchone()
+    if not link:
+        raise HTTPException(404)
+    try:
+        client = banco.Client.from_settings(conn)
+    except banco.BankError as e:
+        return redirect(request, "/banco", str(e), "error")
+    r = banco.sync_link(conn, client, link, today(request))
+    return redirect(request, "/banco", f"{link['aspsp_name']}: {banco.summary_text(r)}.",
+                    "error" if r.get("error") else "ok")
+
+
+@router.post("/banco/{link_id:int}/quitar")
+def bank_remove(request: Request, link_id: int, conn=Depends(get_db)):
+    try:
+        client = banco.Client.from_settings(conn)
+    except banco.BankError:
+        client = None
+    banco.disconnect(conn, client, link_id)
+    return redirect(request, "/banco", "Conexión quitada. Lo que ya se había traído se queda.")
+
+
+@router.post("/banco/por-si-acaso")
+async def bank_fallback(request: Request, conn=Depends(get_db)):
+    form = await request.form()
+    with conn:
+        repo.set_setting(conn, "auto_fallback_category_id", int_or_none(form.get("por_si_acaso")))
+    return redirect(request, "/banco", "Guardado")

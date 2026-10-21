@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Conectar un banco · Finanzas{% endblock %}
+{% block heading %}Conectar un banco{% endblock %}
+{% block main %}
+{% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+<p class="hint">Elige tu banco. Te llevará a su web para que des permiso con tu usuario y su app; al terminar,
+  volverás aquí. Hazlo desde el navegador en el que tienes abierta esta app.</p>
+<input class="filtro" type="search" placeholder="Buscar banco" data-filtrar=".banco-item" autocomplete="off">
+<div class="card list">
+  {% for b in bancos %}
+  <form method="post" action="/banco/conectar" class="banco-item" hx-boost="false">
+    <input type="hidden" name="nombre" value="{{ b.name }}">
+    <input type="hidden" name="pais" value="{{ b.country or b.pais }}">
+    <input type="hidden" name="max" value="{{ b.maximum_consent_validity or '' }}">
+    <button type="submit" class="banco-boton">
+      <span>{{ b.name }}{% if b.beta %} <span class="badge">beta</span>{% endif %}</span>
+      <small class="muted">{{ 'España' if (b.country or b.pais) == 'ES' else 'Alemania' if (b.country or b.pais) == 'DE' else (b.country or b.pais) }}</small>
+    </button>
+  </form>
+  {% else %}
+  {% if not error %}<p class="muted">No hay bancos en la lista.</p>{% endif %}
+  {% endfor %}
+</div>
+{% endblock %}

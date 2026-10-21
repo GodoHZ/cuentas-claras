@@ -59,13 +59,35 @@
       const cat = form.querySelector('input[name="categoria_id"][value="' + options.categoria + '"]');
       if (cat) cat.checked = true;
     }
+    cuentaDelSobre(form);                              // el dinero del sobre vive en su cuenta
+    if (options && options.cuenta) {                   // ...salvo que te la pidan a propósito
+      const acc = form.querySelector('input[name="cuenta_id"][value="' + options.cuenta + '"]');
+      if (acc) { acc.checked = true; form.dataset.cuentaTocada = '1'; }
+    }
+    if (options && options.concepto) {
+      const concept = form.querySelector('input[name="concepto"]');
+      if (concept) concept.value = options.concepto;
+    }
     const uid = form.querySelector('input[name="uid"]');
     if (uid) uid.value = nuevoUid();
     if (!dialog.open) dialog.showModal();
     const amount = form.querySelector('input[name="importe"]');
+    // el importe ya puesto (una cuota prevista, por ejemplo) sale seleccionado:
+    // si escribes, lo sustituyes
+    if (amount && options && options.importe) amount.value = options.importe;
     if (amount) { amount.focus(); amount.select(); }   // en el mismo gesto: iOS abre el teclado
     return true;
   }
+
+  // buscador sencillo de listas (por ejemplo, los bancos)
+  document.addEventListener('input', (event) => {
+    const campo = event.target.closest && event.target.closest('[data-filtrar]');
+    if (!campo) return;
+    const q = campo.value.trim().toLowerCase();
+    document.querySelectorAll(campo.dataset.filtrar).forEach((el) => {
+      el.hidden = Boolean(q) && !el.textContent.toLowerCase().includes(q);
+    });
+  });
 
   document.addEventListener('click', (event) => {
     const opener = event.target.closest('[data-qa]');

@@ -168,6 +168,11 @@
         <input id="cta-{{ a.id }}-s" name="saldo_inicial" inputmode="decimal" value="{{ a.initial_balance|importe_input }}">
         <p class="hint">Lo que había en la cuenta antes del primer movimiento que apuntaste. A partir de ahí
           el saldo lo calcula la app sola.</p>
+        <input type="hidden" name="pregunta_gastar" value="1">
+        <label class="check"><input type="checkbox" name="gastar" value="1" {% if a.spendable %}checked{% endif %}>
+          Cuenta en «puedes gastar»</label>
+        <p class="hint">Déjalo apagado en las cuentas que no son para el día a día: una tarjeta de comida, la de
+          la empresa, una cuenta de inversión… Su saldo se sigue viendo en Cuentas, pero no suma en el panel.</p>
         <button class="btn btn-primary btn-small" type="submit">Guardar</button>
       </form>
       {{ row_actions('cuentas', a, a.id not in usados.cuentas) }}
@@ -178,6 +183,8 @@
       <form method="post" action="/ajustes/lista/cuentas" class="stack">
         <input name="nombre" placeholder="Nombre" maxlength="60">
         <input name="saldo_inicial" inputmode="decimal" placeholder="Saldo inicial en € (opcional)">
+        <input type="hidden" name="pregunta_gastar" value="1">
+        <label class="check"><input type="checkbox" name="gastar" value="1" checked> Cuenta en «puedes gastar»</label>
         <button class="btn btn-primary btn-small" type="submit">Crear</button>
       </form>
     </details>
@@ -205,6 +212,15 @@
         </div>
         <label class="legend" for="loan-{{ l.id }}-x">Número de cuotas</label>
         <input id="loan-{{ l.id }}-x" name="cuotas" inputmode="numeric" value="{{ l.n_installments }}">
+        <label class="legend" for="loan-{{ l.id }}-cat">Categoría con la que apuntas la cuota</label>
+        <select id="loan-{{ l.id }}-cat" name="categoria_id">
+          <option value="">— ninguna —</option>
+          {% for c in categories %}{% if c.kind == 'gasto' and (c.active or c.id == l.category_id) %}
+          <option value="{{ c.id }}" {% if l.category_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+          {% endif %}{% endfor %}
+        </select>
+        <p class="hint">Con ella, la app sabe si la cuota de este mes ya está apuntada y la descuenta de lo
+          «previsto» del panel. Sin ella, la da por pagada en cuanto pasa su día.</p>
         <div class="row-actions">
           <button class="btn btn-primary btn-small" type="submit">Guardar</button>
         </div>
@@ -221,9 +237,23 @@
         <input name="cuota" inputmode="decimal" placeholder="Cuota mensual (€)">
         <input name="primera" type="date" placeholder="1.ª cuota">
         <input name="cuotas" inputmode="numeric" placeholder="Número de cuotas">
+        <select name="categoria_id">
+          <option value="">Categoría con la que la apuntas (opcional)</option>
+          {% for c in categories %}{% if c.kind == 'gasto' and c.active %}
+          <option value="{{ c.id }}">{{ c.name }}</option>
+          {% endif %}{% endfor %}
+        </select>
         <button class="btn btn-primary btn-small" type="submit">Crear</button>
       </form>
     </details>
+  </div>
+</details>
+
+<details id="bancos">
+  <summary>Bancos</summary>
+  <div class="card stack">
+    <p class="hint">Conectar tus bancos para que los movimientos se apunten solos.</p>
+    <a class="btn" href="/banco">Ir a Bancos</a>
   </div>
 </details>
 

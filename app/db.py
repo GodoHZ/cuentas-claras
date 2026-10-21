@@ -8,7 +8,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 7
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS settings (
@@ -43,6 +43,9 @@ CREATE TABLE IF NOT EXISTS accounts (
     -- lo que había en la cuenta el día que la creaste: el saldo se calcula
     -- sumando a esto todos los movimientos
     initial_balance INTEGER NOT NULL DEFAULT 0,
+    -- ¿su saldo cuenta en el «puedes gastar» del panel? Se apaga en las cuentas
+    -- que no son para el día a día (una tarjeta de comida, la de la empresa...)
+    spendable       INTEGER NOT NULL DEFAULT 1,
     position        INTEGER NOT NULL DEFAULT 0,
     active          INTEGER NOT NULL DEFAULT 1
 );
@@ -63,6 +66,11 @@ CREATE TABLE IF NOT EXISTS transactions (
     -- identificador que pone el móvil al apuntar sin conexión: si el envío se
     -- repite, el movimiento no se duplica (ver el índice de más abajo)
     client_uid  TEXT,
+    -- de dónde viene: vacío = a mano; 'banco' = lo trajo la conexión con el banco
+    source      TEXT,
+    -- 1 = la categoría es una suposición y conviene mirarla. Se apaga al
+    -- guardar el movimiento desde la app
+    review      INTEGER NOT NULL DEFAULT 0,
     CHECK (type NOT IN ('aporte_sobre', 'retiro_sobre') OR envelope_id IS NOT NULL),
     CHECK (type NOT IN ('ingreso', 'gasto') OR category_id IS NOT NULL),
     CHECK (type <> 'traspaso' OR (other_account_id IS NOT NULL AND other_account_id <> account_id))
@@ -78,8 +86,47 @@ CREATE TABLE IF NOT EXISTS loans (
     installment    INTEGER NOT NULL CHECK (installment > 0),
     first_date     TEXT NOT NULL,
     n_installments INTEGER NOT NULL CHECK (n_installments > 0),
+    -- con qué categoría apuntas la cuota: sirve para saber si la del mes ya
+    -- está apuntada y descontarla de lo previsto
+    category_id    INTEGER REFERENCES categories(id),
     position       INTEGER NOT NULL DEFAULT 0
 );
+
+-- conexiones con bancos (Enable Banking). Una por banco; se renueva cada pocos
+-- meses porque el banco obliga a volver a dar permiso
+CREATE TABLE IF NOT EXISTS bank_links (
+    id            INTEGER PRIMARY KEY,
+    aspsp_name    TEXT NOT NULL,
+    aspsp_country TEXT NOT NULL,
+    session_id    TEXT,                  -- vacío mientras el banco no ha dicho que sí
+    state         TEXT,                  -- para reconocer la vuelta desde el banco
+    valid_until   TEXT,                  -- hasta cuándo vale el permiso
+    created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    last_sync     TEXT,
+    last_error    TEXT,
+    UNIQUE (aspsp_name, aspsp_country)
+);
+
+-- cada cuenta del banco y en qué cuenta de la app se apunta
+CREATE TABLE IF NOT EXISTS bank_accounts (
+    ident      TEXT PRIMARY KEY,         -- identification_hash: no cambia al renovar el permiso
+    link_id    INTEGER NOT NULL REFERENCES bank_links(id) ON DELETE CASCADE,
+    uid        TEXT,                     -- el identificador de la sesión actual (cambia al renovar)
+    name       TEXT NOT NULL DEFAULT '',
+    iban       TEXT NOT NULL DEFAULT '',
+    account_id INTEGER REFERENCES accounts(id),   -- vacío = no importar esta cuenta
+    since      TEXT NOT NULL             -- desde qué fecha se traen movimientos
+);
+
+-- movimientos del banco ya vistos. Sobrevive al borrado del movimiento (tx_id
+-- pasa a vacío): si borras algo que vino del banco, no vuelve a aparecer
+CREATE TABLE IF NOT EXISTS bank_refs (
+    ref        TEXT PRIMARY KEY,
+    tx_id      INTEGER REFERENCES transactions(id) ON DELETE SET NULL,
+    account_id INTEGER REFERENCES accounts(id),
+    seen_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS ix_bank_refs_tx ON bank_refs(tx_id);
 
 -- saldos reales apuntados a mano de vez en cuando, para comprobar que la app
 -- y el banco dicen lo mismo
@@ -119,6 +166,20 @@ def migrar(conn) -> None:
 
     if "other_account_id" not in columnas:                 # versión 2 -> 3
         _a_la_version_3(conn)
+
+    columnas_prestamos = {r["name"] for r in conn.execute("PRAGMA table_info(loans)")}
+    if columnas_prestamos and "category_id" not in columnas_prestamos:    # versión 3 -> 4
+        conn.execute("ALTER TABLE loans ADD COLUMN category_id INTEGER REFERENCES categories(id)")
+
+    columnas_cuentas = {r["name"] for r in conn.execute("PRAGMA table_info(accounts)")}
+    if columnas_cuentas and "spendable" not in columnas_cuentas:          # versión 4 -> 5
+        conn.execute("ALTER TABLE accounts ADD COLUMN spendable INTEGER NOT NULL DEFAULT 1")
+
+    columnas = {r["name"] for r in conn.execute("PRAGMA table_info(transactions)")}
+    if "source" not in columnas:                                          # versión 5 -> 6
+        conn.execute("ALTER TABLE transactions ADD COLUMN source TEXT")
+    if "review" not in columnas:
+        conn.execute("ALTER TABLE transactions ADD COLUMN review INTEGER NOT NULL DEFAULT 0")
 
 
 def _a_la_version_3(conn) -> None:

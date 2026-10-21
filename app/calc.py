@@ -292,6 +292,80 @@ def installments_ratio(statuses, salary: int | None) -> float | None:
     return sum(s.installment for s in statuses if not s.finished) / salary
 
 
+# ---------------------------------------------------------------- previsto
+
+CUOTA = "cuota"                    # la cuota de un préstamo
+APORTE_MENSUAL = "aporte"          # el aporte mensual de un sobre
+
+
+def installment_in_month(first: date, count: int, year: int, month: int) -> date | None:
+    """Fecha de la cuota que toca ese mes, o None si ese mes no hay ninguna."""
+    index = (year * 12 + month - 1) - (first.year * 12 + first.month - 1)
+    return add_months(first, index) if 0 <= index < count else None
+
+
+def contributed_by_envelope(txs, year: int, month: int) -> dict[int, int]:
+    """Lo aportado a cada sobre durante el mes (los retiros y gastos no cuentan)."""
+    aportado: dict[int, int] = {}
+    for tx in txs:
+        if tx.type == APORTE and tx.envelope_id is not None and in_month(tx, year, month):
+            aportado[tx.envelope_id] = aportado.get(tx.envelope_id, 0) + tx.amount
+    return aportado
+
+
+@dataclass(frozen=True)
+class Upcoming:
+    """Algo que ya sabes que va a salir este mes, apuntado o no."""
+    kind: str                      # 'cuota' | 'aporte'
+    name: str
+    expected: int                  # el importe que toca este mes
+    done: int                      # cuánto de eso has apuntado ya
+    day: int | None = None         # día en que se carga, si se sabe
+    category_id: int | None = None
+    envelope_id: int | None = None
+
+    @property
+    def pending(self) -> int:
+        """Lo que queda por apuntar (nunca negativo: pagar de más no da crédito)."""
+        return max(0, self.expected - self.done)
+
+    @property
+    def paid(self) -> bool:
+        return self.pending == 0
+
+    @property
+    def partial(self) -> bool:
+        return 0 < self.done < self.expected
+
+
+@dataclass(frozen=True)
+class Forecast:
+    """Lo que puedes gastar: el dinero que tienes menos lo que ya tiene dueño.
+
+    Se parte de lo que hay **en las cuentas** (sin lo apartado en sobres), no de
+    la nómina del mes: el dinero que tienes es el dinero que tienes.
+    """
+    available: int                 # en las cuentas y sin apartar en sobres
+    lines: tuple[Upcoming, ...] = ()
+
+    @property
+    def pending(self) -> list[Upcoming]:
+        return [u for u in self.lines if not u.paid]
+
+    @property
+    def pending_total(self) -> int:
+        return sum(u.pending for u in self.lines)
+
+    @property
+    def left(self) -> int:
+        """Lo que te quedará cuando hayas pagado y guardado lo que falta del mes."""
+        return self.available - self.pending_total
+
+    @property
+    def expected_total(self) -> int:
+        return sum(u.expected for u in self.lines)
+
+
 # ---------------------------------------------------------------- cuadre
 
 @dataclass(frozen=True)
