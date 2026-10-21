@@ -55,10 +55,10 @@ with sync_playwright() as p:
     notas.append("borrado: " + str(pag.locator("#sobres .row-item", has_text="Sobre de prueba").count() == 0))
 
     # uno con movimientos no ofrece borrar
-    con_historial = pag.locator("#sobres .row-item", has_text="Hucha coche").first
+    con_historial = pag.locator("#sobres .row-item", has_text="Vacaciones").first
     con_historial.locator("summary").click()
     pag.wait_for_timeout(300)
-    notas.append("«Hucha coche» (con movimientos) no tiene botón de borrar: " +
+    notas.append("«Vacaciones» (con movimientos) no tiene botón de borrar: " +
                  str(con_historial.get_by_role("button", name="Borrar").count() == 0))
     pag.screenshot(path="/out/ajustes-sobres.png", full_page=True)
     nav.close()

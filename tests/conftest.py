@@ -11,10 +11,23 @@ from app import db, main, repo, seed  # noqa: E402
 HOY = date(2026, 9, 19)          # un "hoy" fijo, para que los tests no dependan del calendario
 
 
+@pytest.fixture(autouse=True)
+def secretos_aparte(tmp_path, monkeypatch):
+    """Que ningún test lea ni escriba la clave del banco de verdad."""
+    from app import config
+    monkeypatch.setattr(config, "SECRETS_DIR", tmp_path / "secretos")
+
+
 @pytest.fixture
 def db_path(tmp_path):
     path = tmp_path / "finanzas.db"
     db.init_db(path)
+    # el esqueleto inicial pone el primer mes con el reloj de verdad; aquí manda HOY,
+    # para que los tests den lo mismo en septiembre que en cualquier otro mes
+    conn = db.connect(path)
+    with conn:
+        repo.set_setting(conn, "start_month", HOY.replace(day=1).isoformat())
+    conn.close()
     return path
 
 

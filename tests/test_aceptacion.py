@@ -68,15 +68,22 @@ def test_cuadre_de_una_cuenta(conn):
     ahorro = cuentas["Cuenta de ahorro"]
     apuntar(conn, "2026-09-01", calc.APORTE, 20000, sobre="Colchón", cuenta="Cuenta de ahorro")
     tarjetas, _ = views.accounts_overview(conn, repo.all_txs(conn))
+    cuenta = next(t["account"] for t in tarjetas if t["account"]["id"] == ahorro)
     saldo = next(t["balance"] for t in tarjetas if t["account"]["id"] == ahorro)
     with conn:
         repo.add_check(conn, ahorro, date(2026, 9, 19), saldo)
-    assert views.reconciliation(conn, ahorro, saldo)["r"].message == "Cuadra con el banco"
+    txs = repo.all_txs(conn)
+    assert views.reconciliation(conn, cuenta, txs)["r"].message == "Cuadra con el banco"
 
     with conn:                                       # 5 € de intereses sin apuntar
         repo.add_check(conn, ahorro, date(2026, 9, 20), saldo + 500)
-    cuadre = views.reconciliation(conn, ahorro, saldo)["r"]
+    cuadre = views.reconciliation(conn, cuenta, repo.all_txs(conn))["r"]
     assert cuadre.level == "sobra" and "intereses" in cuadre.message
+
+    # y lo que apuntes DESPUÉS de la comprobación no se cuenta como descuadre
+    apuntar(conn, "2026-09-25", calc.GASTO, 3000, categoria="Ocio", cuenta="Cuenta de ahorro")
+    sigue = views.reconciliation(conn, cuenta, repo.all_txs(conn))["r"]
+    assert sigue.difference == 500 and "intereses" in sigue.message
 
 
 def test_prestamo(conn):

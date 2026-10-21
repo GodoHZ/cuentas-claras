@@ -22,11 +22,13 @@
 <section id="cuadre" class="card">
   <h2>¿Cuadra con el banco?</h2>
   {% if cuadre %}
+  <p class="hint">Se compara con el saldo que la app calculaba el día de la comprobación, así que lo que
+    apuntes después no inventa descuadres. El saldo de hoy es {{ balance|eur }}.</p>
   <div class="cuadre-result level-{{ cuadre.r.level }}">
     <p class="cuadre-msg">{{ icono_nivel(cuadre.r.level) }} {{ cuadre.r.message }}</p>
     <dl class="cuadre-table">
       <dt>Según el banco (el {{ cuadre.check.date|fecha }})</dt><dd class="num">{{ cuadre.r.real|eur }}</dd>
-      <dt>Según la app</dt><dd class="num">{{ cuadre.r.calculated|eur }}</dd>
+      <dt>Según la app ese día</dt><dd class="num">{{ cuadre.r.calculated|eur }}</dd>
       <dt>Diferencia</dt><dd class="num strong">{{ cuadre.r.difference|eur_sign }}</dd>
     </dl>
     {% if cuadre.r.difference %}

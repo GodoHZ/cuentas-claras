@@ -117,28 +117,98 @@ def accounts_overview(conn, txs, include_archived: bool = False):
         saldo = saldos.get(cuenta["id"], 0)
         tarjetas.append({
             "account": cuenta, "balance": saldo, "in_envelopes": apartado, "free": saldo - apartado,
-            "check": reconciliation(conn, cuenta["id"], saldo),
+            "check": reconciliation(conn, cuenta, txs),
         })
     return tarjetas, sum(saldos.get(c["id"], 0) for c in cuentas)
 
 
-def reconciliation(conn, account_id: int, calculated: int):
-    """Lo que dijo el banco la última vez frente a lo que calcula la app."""
-    last = repo.last_check(conn, account_id)
+def reconciliation(conn, account, txs):
+    """Lo que dijo el banco la última vez frente a lo que calculaba la app ESE DÍA.
+
+    La comparación es contra el saldo a la fecha de la comprobación, no contra el
+    de hoy: si no, todo lo que apuntaras después saldría como un descuadre que no
+    existe.
+    """
+    last = repo.last_check(conn, account["id"])
     if not last:
         return None
+    calculated = calc.account_balance_at(txs, account["id"], account["initial_balance"] or 0,
+                                         date.fromisoformat(last["date"]))
     return {
         "check": last,
         "r": calc.reconcile(last["balance"], calculated, repo.rule(conn, "reconcile_small_cents")),
     }
 
 
+def loan_upcoming(loan, spent: dict[int, int], year: int, month: int, today: date):
+    """La cuota de ese mes y si ya la has apuntado. None si ese mes no toca ninguna.
+
+    Para saber si está apuntada se miran los gastos de la categoría del préstamo.
+    Si no le has puesto categoría, se da por pagada cuando pasa su día: las cuotas
+    van domiciliadas, así que el banco la cobra solo.
+    """
+    due = calc.installment_in_month(date.fromisoformat(loan["first_date"]),
+                                    loan["n_installments"], year, month)
+    if due is None:
+        return None
+    if loan["category_id"]:
+        done = spent.get(loan["category_id"], 0)
+    else:
+        done = loan["installment"] if today > due else 0
+    return calc.Upcoming(calc.CUOTA, loan["name"], loan["installment"],
+                         min(done, loan["installment"]), due.day,
+                         category_id=loan["category_id"])
+
+
+def available_money(conn, txs) -> int:
+    """El dinero que tienes y no tiene nombre todavía.
+
+    Lo que hay en las cuentas activas que cuentan para el día a día, menos lo que
+    guardan los sobres. Es el punto de partida de todo: el dinero que tienes es el
+    que tienes, no el que hayas cobrado este mes. Las cuentas que no son para
+    gastar (una tarjeta de comida, por ejemplo) se dejan fuera en Ajustes.
+    """
+    cuentan = {a["id"] for a in repo.accounts(conn, active=True) if a["spendable"]}
+    saldos = calc.account_balances(txs, repo.accounts(conn))
+    cuenta_del_sobre = {e["id"]: e["account_id"] for e in repo.envelopes(conn)}
+    # de los sobres se descuenta lo que viva en esas cuentas (y lo que no viva en ninguna)
+    apartado = sum(saldo for env, saldo in calc.envelope_balances(txs).items()
+                   if cuenta_del_sobre.get(env) in cuentan or cuenta_del_sobre.get(env) is None)
+    return sum(saldos.get(i, 0) for i in cuentan) - apartado
+
+
+def forecast(conn, txs, year: int, month: int, today: date) -> calc.Forecast:
+    """Lo que puedes gastar: lo que tienes menos lo que ya está comprometido.
+
+    Lo comprometido son dos cosas: la cuota de cada préstamo que toque este mes y
+    el aporte mensual de cada sobre, descontando lo que ya hayas apuntado de cada
+    una. Así, a principio de mes, el dinero que va a salir sí o sí no parece tuyo.
+    """
+    spent = calc.spent_by_category(txs, year, month)
+    contributed = calc.contributed_by_envelope(txs, year, month)
+    lines = []
+    for loan in repo.loans(conn):
+        cuota = loan_upcoming(loan, spent, year, month, today)
+        if cuota:
+            lines.append(cuota)
+    for env in repo.envelopes(conn, active=True):
+        if env["monthly"]:
+            lines.append(calc.Upcoming(calc.APORTE_MENSUAL, env["name"], env["monthly"],
+                                       min(contributed.get(env["id"], 0), env["monthly"]),
+                                       envelope_id=env["id"]))
+    return calc.Forecast(available_money(conn, txs), tuple(lines))
+
+
 def debts(conn, txs, today: date):
+    spent = calc.spent_by_category(txs, today.year, today.month)
     items = []
     for loan in repo.loans(conn):
         st = calc.loan_status(loan["installment"], date.fromisoformat(loan["first_date"]),
                               loan["n_installments"], today)
-        items.append({"loan": loan, "st": st})
+        items.append({"loan": loan, "st": st,
+                      "month": loan_upcoming(loan, spent, today.year, today.month, today),
+                      "category": repo.get_row(conn, "categories", loan["category_id"])
+                                  if loan["category_id"] else None})
     salary = repo.salary(conn)
     limit = repo.rule(conn, "installments_limit_pct") / 100
     amort_id = repo.int_setting(conn, "amortization_category_id")
@@ -153,6 +223,8 @@ def debts(conn, txs, today: date):
         "pending_total": sum(s.pending_total for s in alive),
         "extra": extra,
         "amort_category": repo.get_row(conn, "categories", amort_id) if amort_id else None,
+        "month_pending": sum(i["month"].pending for i in items if i["month"]),
+        "month_total": sum(i["month"].expected for i in items if i["month"]),
     }
 
 

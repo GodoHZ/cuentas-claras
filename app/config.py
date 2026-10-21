@@ -19,6 +19,10 @@ BACKUP_KEEP_DAYS = int(os.environ.get("BACKUP_KEEP_DAYS", "30"))
 # Fichero que tiene que existir en la carpeta de copias para dar por buena la
 # ruta (sirve para no escribir en un punto de montaje sin montar). Vacío = no comprobar.
 BACKUP_SENTINEL = os.environ.get("BACKUP_SENTINEL", "")
+# Dónde se guarda la clave privada de la conexión con el banco. Conviene que no
+# esté dentro de DATA_DIR si esa carpeta va a copias en la nube.
+SECRETS_DIR = Path(os.environ.get("SECRETS_DIR", DATA_DIR / "secretos"))
+BANK_API = os.environ.get("BANK_API", "https://api.enablebanking.com")
 
 
 def now() -> datetime:

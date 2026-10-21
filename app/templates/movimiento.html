@@ -2,6 +2,10 @@
 {% block title %}Editar movimiento · Finanzas{% endblock %}
 {% block heading %}Editar movimiento{% endblock %}
 {% block main %}
+{% if tx.review %}
+<p class="note">Lo apuntó la app sola y es la primera vez que pagas aquí, así que la categoría es una
+  suposición. Cámbiala si no es la buena y dale a Guardar: la próxima vez ya lo sabrá.</p>
+{% endif %}
 <div class="card">
   {% with dialog=False, action="/movimientos/" ~ tx.id %}{% include "partials/txform.html" %}{% endwith %}
 </div>

@@ -154,8 +154,10 @@ LEFT JOIN accounts o ON o.id = t.other_account_id
 def tx_rows(conn, month: tuple[int, int] | None = None, type_: str | None = None,
             category_id: int | None = None, envelope_id: int | None = None,
             account_id: int | None = None, limit: int | None = None,
-            oldest_first: bool = False) -> list[sqlite3.Row]:
+            oldest_first: bool = False, review: bool = False) -> list[sqlite3.Row]:
     sql, args = TX_SELECT + " WHERE 1=1", []
+    if review:
+        sql += " AND t.review = 1"
     if month:
         sql += " AND substr(t.date, 1, 7) = ?"
         args.append(f"{month[0]:04d}-{month[1]:02d}")
@@ -183,14 +185,14 @@ def get_tx(conn, tx_id: int) -> sqlite3.Row | None:
 
 TX_FIELDS = ("date", "type", "category_id", "envelope_id", "account_id", "other_account_id",
              "concept", "amount")
-TX_INSERT_FIELDS = TX_FIELDS + ("client_uid",)
+TX_INSERT_FIELDS = TX_FIELDS + ("client_uid", "source", "review")
 
 
 def insert_tx(conn, **fields) -> int:
     cur = conn.execute(
         f"INSERT INTO transactions ({', '.join(TX_INSERT_FIELDS)}) "
         f"VALUES ({', '.join('?' * len(TX_INSERT_FIELDS))})",
-        [fields.get(f) for f in TX_INSERT_FIELDS])
+        [fields.get(f, 0 if f == "review" else None) for f in TX_INSERT_FIELDS])
     return cur.lastrowid
 
 
@@ -200,7 +202,8 @@ def tx_by_uid(conn, uid: str):
 
 
 def update_tx(conn, tx_id: int, **fields) -> None:
-    conn.execute(f"UPDATE transactions SET {', '.join(f + ' = ?' for f in TX_FIELDS)} WHERE id = ?",
+    """Guardar un movimiento desde la app es darlo por revisado."""
+    conn.execute(f"UPDATE transactions SET {', '.join(f + ' = ?' for f in TX_FIELDS)}, review = 0 WHERE id = ?",
                  [fields[f] for f in TX_FIELDS] + [tx_id])
 
 
@@ -241,3 +244,8 @@ def checks(conn, account_id: int | None = None, limit: int = 6) -> list[sqlite3.
 def add_check(conn, account_id: int, day: date, balance: int) -> None:
     conn.execute("INSERT INTO account_checks (account_id, date, balance) VALUES (?, ?, ?)",
                  (account_id, day.isoformat(), balance))
+
+
+def review_count(conn) -> int:
+    """Cuántos movimientos tienen la categoría por confirmar."""
+    return conn.execute("SELECT COUNT(*) FROM transactions WHERE review = 1").fetchone()[0]

@@ -25,17 +25,33 @@ Dos ideas la sostienen:
 
 ## Qué hace
 
-- **Panel del mes**: ingresos, gastos, lo guardado y el **libre** (ingresos − gastos − aportado).
+- **Panel**: arranca por lo que **puedes gastar**, que se calcula desde el dinero que
+  tienes de verdad (lo que hay en tus cuentas, sin lo apartado en sobres) menos lo que
+  ya está comprometido este mes. Debajo, cómo va el mes: ingresos, gastos, lo guardado
+  y el libre del mes.
 - **Apuntar rápido**: importe con teclado numérico, cuatro tipos de movimiento y
   las categorías más usadas a un toque. Instalada como PWA, se abre a pantalla completa.
 - **Cuentas**: saldo de cada una, cuánto está apartado en sobres y cuánto queda
   libre. Los traspasos mueven dinero entre cuentas sin contar como gasto ni ingreso.
+  Cada cuenta decide si **suma en «puedes gastar»**: una tarjeta de comida o la cuenta
+  de la empresa se dejan fuera sin perderlas de vista.
 - **Sobres**: objetivo, aporte mensual, barra de progreso y cuánto falta. Cada uno
   vive en una cuenta. Las **sobras del mes** pueden guardarse solas en el que elijas.
 - **Cuadre opcional**: apuntas de vez en cuando el saldo que dice el banco y la app
   te avisa si se le ha escapado algo. Un botón deduce el saldo inicial para que cuadre.
+- **Previsto del mes**: las cuotas de tus préstamos y los aportes mensuales de tus sobres
+  que todavía no has apuntado se descuentan de lo que tienes, así que a principio de mes,
+  con la nómina entera y las cuotas aún sin pasar por el banco, el dinero que va a salir
+  sí o sí no parece tuyo. Cada línea tiene un botón para apuntarla con el importe ya
+  puesto, y desaparece de la lista en cuanto lo haces.
+- **Movimientos del banco, solos**: con [Enable Banking](https://enablebanking.com) (gratis
+  para tus propias cuentas), la app trae cada pocas horas los movimientos y el saldo. Lo que
+  ya hubieras apuntado a mano se reconoce y no se duplica, un traspaso entre dos cuentas
+  tuyas queda como traspaso, y la categoría la aprende de lo que hagas tú: la primera vez
+  que aparece un comercio la supone (Repsol → Gasolina) y lo deja «por revisar».
 - **Presupuesto** por categoría, con avisos configurables.
-- **Deudas**: cuotas pagadas y pendientes, última cuota y qué parte de la nómina se va en ellas.
+- **Deudas**: cuotas pagadas y pendientes, la cuota de este mes (apuntada o no), última
+  cuota y qué parte de la nómina se va en ellas.
 - **Resumen** de 12 meses, en tabla y en gráfico.
 - **Copias de seguridad** diarias hechas por la propia app, verificadas y rotadas,
   más exportar a CSV/JSON e importar el CSV de una hoja de cálculo.
@@ -54,7 +70,7 @@ Todo está en castellano, en euros y con fechas dd/mm/aaaa.
 
 ```bash
 git clone https://github.com/GodoHZ/cuentas-claras.git && cd cuentas-claras
-docker build -t finanzas-app:2.0.0 --build-arg VERSION=2.0.0 .
+docker build -t finanzas-app:2.5.0 --build-arg VERSION=2.5.0 .
 docker compose up -d
 ```
 
@@ -80,6 +96,10 @@ Conviene decirlo claro antes de que la pongas en marcha:
   cotillee si le dejas el móvil desbloqueado; no para aguantar a alguien decidido.
 - **La base de datos no está cifrada.** Quien tenga acceso al fichero, tiene tus
   números. Cífralo desde abajo (disco, LUKS...) si te preocupa.
+- **La conexión con el banco** solo puede leer movimientos y saldos de las cuentas a las
+  que des permiso; no puede mover dinero. La clave privada se guarda en `SECRETS_DIR`,
+  fuera de la base de datos: si tus copias de `DATA_DIR` van a la nube, pon `SECRETS_DIR`
+  en otro sitio.
 - **Las copias en el móvil** (Ajustes → Sin conexión) se pueden leer sin el PIN,
   porque sin red no hay servidor que lo compruebe. Por eso, con PIN, vienen
   apagadas y la propia app te avisa al activarlas.
@@ -93,6 +113,7 @@ Variables del contenedor:
 | `BACKUP_DIR` | dónde van las copias | `/app/backups` |
 | `BACKUP_SENTINEL` | fichero que debe existir en la carpeta de copias para escribir en ella | vacío (no comprueba) |
 | `APP_VERSION` | se enseña en Ajustes y marca la caché del service worker | `dev` |
+| `SECRETS_DIR` | dónde se guarda la clave de la conexión con el banco | `DATA_DIR/secretos` |
 
 `BACKUP_SENTINEL` es para cuando las copias van a otro disco: si ese disco no
 está montado, la app **no escribe** en el punto de montaje vacío y avisa, en vez
@@ -109,7 +130,14 @@ de dejar ficheros escondidos debajo.
 - **Saldo de una cuenta** = saldo inicial + ingresos − gastos ± traspasos. Un aporte
   a un sobre mueve dinero solo si dices de qué cuenta sale; si no, solo lo aparta.
 - **Libre en una cuenta** = su saldo − lo que tienen los sobres que viven en ella.
-- **Cuadre** = lo que dice el banco − lo que calcula la app.
+- **Puedes gastar** = saldo de las cuentas que marques como del día a día − lo que
+  tengan apartado en sobres − previsto. Lo que vive en una cuenta que no suma no resta.
+- **Previsto** = cuotas del mes + aportes mensuales de los sobres, menos lo que ya hayas
+  apuntado de cada cosa. Una cuota se da por apuntada
+  cuando los gastos de su categoría la cubren, o, si el préstamo no tiene categoría, cuando
+  pasa su día (van domiciliadas).
+- **Cuadre** = lo que dice el banco − lo que calculaba la app **el día de esa
+  comprobación** (lo que apuntes después no cuenta como descuadre).
 - Lo que tiene movimientos solo se puede **archivar**, no borrar; lo que no se ha
   usado nunca se borra del todo.
 
@@ -130,6 +158,8 @@ app/
   seed.py      esqueleto inicial      backup.py   copias, rotación y restauración
   importer.py  importador de CSV      export.py   exportar a JSON y CSV
   pin.py       PIN opcional           money.py    céntimos y formato español
+  banco.py     movimientos del banco (Enable Banking), sin duplicar nada
+  clasificar.py  adivina y aprende la categoría de lo que se apunta solo
   templates/   pantallas              static/     CSS, JS e iconos
 tests/         pytest, se ejecutan dentro del docker build
 scripts/       iconos, despliegue en Portainer, capturas con WebKit

@@ -44,5 +44,8 @@ with conn:
         repo.insert_tx(conn, date=fecha, type=tipo, category_id=cats.get(cat), envelope_id=envs.get(env),
                        account_id=accs[acc], other_account_id=otra, concept=concepto, amount=importe)
     repo.add_check(conn, accs["Cuenta de ahorro"], __import__("datetime").date(2026, 9, 19), 66470)
+    # un préstamo con su categoría, para que se vea el «previsto» del mes
+    conn.execute("INSERT INTO loans (name, installment, first_date, n_installments, category_id, position) "
+                 "VALUES ('Coche', 21500, '2026-06-21', 60, ?, 0)", (cats["Transporte"],))
 print("demo lista:", sum(calc.envelope_balances(repo.all_txs(conn)).values()))
 conn.close()

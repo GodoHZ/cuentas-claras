@@ -3,7 +3,7 @@ from conftest import apuntar, ids
 
 CSV = """Fecha,Tipo,Categoría,Sobre,Cuenta,Concepto,Importe (€)
 19/09/2026,Gasto,Ocio,,Cuenta corriente,Cena,"25,50 €"
-19/09/2026,Ingreso,Nómina,,Cuenta corriente,Nómina de septiembre,"1.423,00 €"
+19/09/2026,Ingreso,Nómina,,Cuenta corriente,Nómina de septiembre,"1.650,00 €"
 20/09/2026,Aporte a sobre,,Coche,Cuenta de ahorro,Aporte mensual,"100,00 €"
 21/09/2026,Gasto,Transporte,Coche,Cuenta de ahorro,Gasoil,"60,00 €"
 22/09/2026,Gasto,Ocio,,Cuenta corriente,Fila de ejemplo (ejemplo),"10,00 €"
