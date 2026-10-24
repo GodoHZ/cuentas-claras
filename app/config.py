@@ -31,3 +31,6 @@ def now() -> datetime:
 
 def today() -> date:
     return now().date()
+
+# Clave de la API (/api/...). Vacía = API apagada.
+API_KEY = os.environ.get("API_KEY", "").strip()

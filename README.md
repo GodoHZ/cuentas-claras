@@ -72,7 +72,7 @@ Todo está en castellano, en euros y con fechas dd/mm/aaaa.
 
 ```bash
 git clone https://github.com/GodoHZ/cuentas-claras.git && cd cuentas-claras
-docker build -t finanzas-app:2.5.2 --build-arg VERSION=2.5.2 .
+docker build -t finanzas-app:2.6.0 --build-arg VERSION=2.6.0 .
 docker compose up -d
 ```
 
@@ -83,6 +83,22 @@ todo eso se cambia desde Ajustes.
 Las carpetas `data/` y `backups/` vienen en el repositorio (vacías) para que sean
 tuyas y no de root. El contenedor corre como el usuario `1000:1000`; si el tuyo
 es otro, cambia esa línea del `docker-compose.yml` por lo que diga `id -u`.
+
+## API (bot de Telegram, Atajos del iPhone)
+
+Si pones la variable `API_KEY`, la app abre una API pequeña con la que otras cosas pueden
+apuntar gastos y consultar lo que puedes gastar sin pasar por el PIN. Sin `API_KEY`, no existe.
+Todas las llamadas llevan la cabecera `Authorization: Bearer <API_KEY>`.
+
+| | |
+|---|---|
+| `GET /api/saldo` | `{"puedes_gastar": 123450, "texto": "1.234,50 €", ...}` (importes en céntimos) |
+| `GET /api/categorias` | las categorías de gasto activas |
+| `POST /api/gastos` | `{"importe": "12,50", "categoria": "comida", "concepto": "opcional"}`: el gasto, hoy, en la cuenta por defecto |
+
+La categoría se busca sin distinguir mayúsculas ni acentos, y vale el principio del nombre
+(«super» → «Supermercado»). Se valida igual que el formulario, así que un gasto apuntado por
+la API queda exactamente igual que uno apuntado a mano.
 
 ## Hasta dónde llega la seguridad
 

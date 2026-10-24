@@ -1,7 +1,7 @@
 # Finanzas — despliegue con Docker.
 #
 # La imagen se construye a mano (no está en ningún registro):
-#     docker build -t finanzas-app:2.5.2 --build-arg VERSION=2.5.2 .
+#     docker build -t finanzas-app:2.6.0 --build-arg VERSION=2.6.0 .
 #     docker compose up -d
 #
 # Escucha solo en 127.0.0.1: pensado para publicarlo detrás de un proxy inverso
@@ -10,7 +10,7 @@
 # opcional en Ajustes.
 services:
   finanzas:
-    image: finanzas-app:2.5.2
+    image: finanzas-app:2.6.0
     container_name: finanzas
     restart: unless-stopped
     user: "1000:1000"              # el dueño de ./data y ./backups
@@ -18,6 +18,7 @@ services:
       - "127.0.0.1:8095:8000"
     environment:
       - TZ=Europe/Madrid
+      # - API_KEY=una-clave-larga   # activa /api/ (bot de Telegram, Atajos del iPhone)
       # Si las copias van a otro disco, el nombre de un fichero que solo exista
       # ahí: la app se niega a escribir si no lo encuentra (por si no está montado).
       # - BACKUP_SENTINEL=.esta-en-el-disco-de-copias
