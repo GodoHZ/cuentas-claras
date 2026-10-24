@@ -369,6 +369,10 @@ table.data.small { font-size: 12px; }
 code.copiable { display: block; padding: 6px 8px; border-radius: 8px; background: var(--surface-2);
                 font-size: 12px; overflow-wrap: anywhere; user-select: all; }
 /* bancos */
+.banco-mirando { padding: 2px 4px; }
+.aviso-banco { display: flex; gap: 10px; align-items: flex-start; text-decoration: none; color: var(--ink);
+               background: color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+.aviso-banco strong { display: block; }
 .banco-cuenta { border-top: 1px solid var(--line); padding-top: 10px; }
 .banco-boton { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%;
                background: none; border: 0; padding: 12px 4px; font: inherit; color: var(--ink);

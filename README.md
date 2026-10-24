@@ -45,7 +45,9 @@ Dos ideas la sostienen:
   sí o sí no parece tuyo. Cada línea tiene un botón para apuntarla con el importe ya
   puesto, y desaparece de la lista en cuanto lo haces.
 - **Movimientos del banco, solos**: con [Enable Banking](https://enablebanking.com) (gratis
-  para tus propias cuentas), la app trae cada pocas horas los movimientos y el saldo. Lo que
+  para tus propias cuentas), la app trae los movimientos y el saldo cada vez que la abres
+  (como mucho cada 15 minutos) y, además, 4 veces al día por su cuenta, que es el máximo
+  que permite la normativa europea cuando no estás delante. Lo que
   ya hubieras apuntado a mano se reconoce y no se duplica, un traspaso entre dos cuentas
   tuyas queda como traspaso, y la categoría la aprende de lo que hagas tú: la primera vez
   que aparece un comercio la supone (Repsol → Gasolina) y lo deja «por revisar».
@@ -70,7 +72,7 @@ Todo está en castellano, en euros y con fechas dd/mm/aaaa.
 
 ```bash
 git clone https://github.com/GodoHZ/cuentas-claras.git && cd cuentas-claras
-docker build -t finanzas-app:2.5.0 --build-arg VERSION=2.5.0 .
+docker build -t finanzas-app:2.5.2 --build-arg VERSION=2.5.2 .
 docker compose up -d
 ```
 

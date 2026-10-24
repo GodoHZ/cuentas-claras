@@ -42,6 +42,10 @@
 </section>
 {% endif %}
 
+{% if banco_al_abrir %}
+<div id="banco-al-abrir" hx-post="/banco/al-abrir" hx-trigger="load delay:400ms" hx-swap="outerHTML"
+     class="banco-mirando muted small">Mirando si hay movimientos nuevos en el banco…</div>
+{% endif %}
 {% for b in banco_caduca %}
 <a class="card aviso-revisar" href="/banco">
   {{ icono("aviso") }}

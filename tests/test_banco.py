@@ -21,6 +21,10 @@ class BancoFalso:
         self.sesion = sesion or SESION
         self.llamadas = []
 
+    def with_psu(self, headers):
+        self.psu = headers
+        return self
+
     def aspsps(self, country):
         return [{"name": "Mi Banco", "country": country, "maximum_consent_validity": 15552000}]
 
@@ -325,3 +329,67 @@ def test_el_panel_avisa_antes_de_que_caduque(client, db_path):
                      ((datetime.now(timezone.utc).replace(microsecond=0)).strftime("%Y-%m-%dT%H:%M:%SZ"),))
     conn.close()
     assert "La conexión con Mi Banco" in client.get("/").text
+
+
+# ---------------------------------------------------------------- estando tú delante
+
+def test_las_cabeceras_de_estoy_delante_solo_van_en_las_consultas(monkeypatch):
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    pem = rsa.generate_private_key(public_exponent=65537, key_size=2048).private_bytes(
+        serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+    vistas = []
+
+    class Respuesta:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return b'{"transactions": [], "balances": [], "url": "https://x"}'
+
+    def abrir(peticion, timeout):
+        vistas.append((peticion.full_url, dict(peticion.header_items())))
+        return Respuesta()
+    monkeypatch.setattr(banco.urllib.request, "urlopen", abrir)
+    cliente = banco.Client("app-1", pem, "https://api.example").with_psu(
+        {"Psu-Ip-Address": "10.0.0.7", "Psu-User-Agent": "Safari"})
+    cliente.transactions("u1", date(2026, 9, 1))
+    cliente.start_auth("Mi Banco", "ES", AHORA, "st", "https://app/vuelta")
+    consulta, permiso = vistas
+    assert consulta[1].get("Psu-ip-address") == "10.0.0.7" and consulta[1].get("Psu-user-agent") == "Safari"
+    assert not any(k.lower().startswith("psu-") for k in permiso[1])
+
+
+def test_si_el_banco_no_acepta_las_cabeceras_lo_intenta_sin_ellas(conn):
+    class Quisquilloso(BancoFalso):
+        def with_psu(self, headers):
+            otro = Quisquilloso(self.movimientos)
+            otro.psu = headers
+            return otro
+
+        def transactions(self, uid, date_from, continuation_key=None):
+            if getattr(self, "psu", None):
+                raise banco.BankError("El banco ha respondido con un error 400: PSU_HEADER_NOT_PROVIDED")
+            return super().transactions(uid, date_from, continuation_key)
+
+    falso = Quisquilloso(movimientos={"u-corriente": [[mov("2026-09-18", "3.00", "KIOSCO", ref="k1")]]})
+    conectar(conn, falso)
+    (nombre, r), = banco.sync_all_present(conn, falso, {"Psu-Ip-Address": "1.2.3.4"}, HOY, now=AHORA)
+    assert r["error"] is None and r["nuevos"] == 1
+
+
+def test_al_abrir_la_app_mira_el_banco_una_vez_cada_15_minutos(client, db_path, monkeypatch):
+    falso = BancoFalso(movimientos={"u-corriente": [[mov("2026-09-18", "4.20", "CAFETERIA SOL", ref="w1")]]})
+    monkeypatch.setattr(banco.Client, "from_settings", classmethod(lambda cls, conn: falso))
+    monkeypatch.setattr(banco, "configured", lambda conn: True)
+    conn = db.connect(db_path)
+    conectar(conn, falso, desde="2026-09-18")
+    with conn:
+        conn.execute("UPDATE bank_links SET last_sync = NULL")
+    conn.close()
+    assert "Mirando si hay movimientos nuevos" in client.get("/").text
+    r = client.post("/banco/al-abrir", headers={"User-Agent": "Safari de prueba", "HX-Request": "true"})
+    assert "1 movimiento nuevo del banco" in r.text
+    assert falso.psu["Psu-User-Agent"] == "Safari de prueba" and falso.psu["Psu-Ip-Address"]
+    # recién mirado: ni lo vuelve a pedir el panel ni llama al banco
+    assert "Mirando si hay movimientos nuevos" not in client.get("/").text
+    llamadas = len(falso.llamadas)
+    assert client.post("/banco/al-abrir").text == "" and len(falso.llamadas) == llamadas

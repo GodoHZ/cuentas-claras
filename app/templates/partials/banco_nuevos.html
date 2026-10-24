@@ -1,0 +1,6 @@
+{% from "_iconos.html" import icono %}
+<a class="card aviso-banco" href="/" hx-boost="false">
+  {{ icono("copia") }}
+  <span><strong>{{ nuevos }} movimiento{{ 's' if nuevos != 1 }} nuevo{{ 's' if nuevos != 1 }} del banco</strong>
+    <span class="muted">Toca para actualizar las cifras.</span></span>
+</a>

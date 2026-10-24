@@ -26,6 +26,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
 import os
 import secrets
 import time
@@ -39,12 +40,16 @@ from pathlib import Path
 from . import calc, clasificar, config, repo
 
 SOURCE = "banco"
+log = logging.getLogger("finanzas")
 KEY_FILE = "enablebanking.pem"
 MAX_CONSENT = timedelta(days=180)
 OVERLAP = timedelta(days=30)        # cada vez se vuelve a mirar el último mes: el banco a veces apunta tarde
 MATCH_DAYS = 4                      # un movimiento tuyo y el del banco son el mismo si se separan hasta 4 días
 TRANSFER_DAYS = 3                   # lo que sale de una cuenta y entra en otra en 3 días es un traspaso
+# La ley (RTS de PSD2, art. 36.5.b) solo deja consultar 4 veces al día cuando tú no
+# estás delante: cada 6 horas. Cuando abres la app sí estás, y eso no cuenta.
 AUTO_SYNC_EVERY = timedelta(hours=6)
+PRESENT_SYNC_EVERY = timedelta(minutes=15)
 WARN_BEFORE = timedelta(days=14)    # avisar de que el permiso caduca
 
 
@@ -101,8 +106,16 @@ def make_jwt(app_id: str, pem: bytes, now: float | None = None) -> str:
 class Client:
     """Las llamadas a Enable Banking que usa la app. En los tests se cambia por uno falso."""
 
-    def __init__(self, app_id: str, pem: bytes, base: str = config.BANK_API):
+    def __init__(self, app_id: str, pem: bytes, base: str = config.BANK_API, psu: dict | None = None):
         self.app_id, self.pem, self.base = app_id, pem, base.rstrip("/")
+        self.psu = psu or {}
+
+    def with_psu(self, headers: dict) -> "Client":
+        """Una copia que le dice al banco que estás delante (cabeceras Psu-*).
+
+        Así la consulta no cuenta para el límite de 4 al día.
+        """
+        return Client(self.app_id, self.pem, self.base, headers)
 
     @classmethod
     def from_settings(cls, conn) -> "Client":
@@ -115,9 +128,11 @@ class Client:
         if query:
             url += "?" + urllib.parse.urlencode({k: v for k, v in query.items() if v is not None})
         datos = json.dumps(body).encode() if body is not None else None
-        peticion = urllib.request.Request(url, data=datos, method=method, headers={
-            "Authorization": f"Bearer {make_jwt(self.app_id, self.pem)}",
-            "Content-Type": "application/json", "Accept": "application/json"})
+        cabeceras = {"Authorization": f"Bearer {make_jwt(self.app_id, self.pem)}",
+                     "Content-Type": "application/json", "Accept": "application/json"}
+        if path.startswith("/accounts/"):            # solo las consultas de datos llevan las Psu-*
+            cabeceras.update({k: v for k, v in self.psu.items() if v})
+        peticion = urllib.request.Request(url, data=datos, method=method, headers=cabeceras)
         try:
             with urllib.request.urlopen(peticion, timeout=40) as respuesta:
                 texto = respuesta.read().decode() or "{}"
@@ -460,6 +475,33 @@ def expiring(conn, now: datetime | None = None) -> list[dict]:
                 avisos.append({"name": link["aspsp_name"], "until": hasta.astimezone(config.TZ).date(),
                                "expired": hasta <= now})
     return avisos
+
+
+def present_sync_due(conn, now: datetime | None = None) -> bool:
+    """¿Toca mirar el banco al abrir la app? Si se miró hace menos de 15 minutos, no."""
+    now = now or datetime.now(timezone.utc)
+    conectadas = [link for link in links(conn) if link["session_id"]]
+    if not conectadas:
+        return False
+    ultimas = [_parse_dt(link["last_sync"]) for link in conectadas if link["last_sync"]]
+    return len(ultimas) < len(conectadas) or now - min(ultimas) >= PRESENT_SYNC_EVERY
+
+
+def sync_all_present(conn, client, psu: dict, today: date, now: datetime | None = None):
+    """Sincroniza estando tú delante. Si un banco no acepta las cabeceras, lo intenta sin ellas."""
+    resultados = []
+    for link in links(conn):
+        if not link["session_id"]:
+            continue
+        r = sync_link(conn, client.with_psu(psu), link, today, now)
+        if r.get("error") and "PSU" in r["error"].upper():
+            log.warning("%s no acepta el modo «estoy delante» (%s): repito en modo normal",
+                        link["aspsp_name"], r["error"])
+            r = sync_link(conn, client, link, today, now)
+        else:
+            log.info("%s, estando delante: %s", link["aspsp_name"], summary_text(r))
+        resultados.append((link["aspsp_name"], r))
+    return resultados
 
 
 def auto_sync_due(conn, now: datetime | None = None) -> bool:

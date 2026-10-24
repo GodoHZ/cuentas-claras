@@ -304,6 +304,7 @@ def panel(request: Request, mes: str = "", conn=Depends(get_db)):
         "fuera_de_la_suma": fuera,
         "por_revisar": repo.review_count(conn),
         "banco_caduca": banco.expiring(conn),
+        "banco_al_abrir": es_actual and banco.configured(conn) and banco.present_sync_due(conn),
         "year": year, "month": month, "is_current": es_actual,
         "m": calc.month_summary(txs, year, month),
         "cards": cards, "total_envelopes": total,
@@ -1316,6 +1317,36 @@ async def bank_account_save(request: Request, conn=Depends(get_db)):
     return redirect(request, "/banco", "Guardado. Se aplicará en la próxima sincronización.")
 
 
+def psu_headers(request: Request) -> dict:
+    """Lo que el banco necesita para saber que eres tú quien mira, desde tu navegador."""
+    h = request.headers
+    return {
+        "Psu-Ip-Address": request.client.host if request.client else "",
+        "Psu-User-Agent": h.get("user-agent", ""),
+        "Psu-Referer": h.get("referer", ""),
+        "Psu-Accept": h.get("accept") or "*/*",
+        "Psu-Accept-Charset": h.get("accept-charset") or "utf-8",
+        "Psu-Accept-Encoding": h.get("accept-encoding") or "gzip",
+        "Psu-Accept-language": h.get("accept-language") or "es-ES",
+    }
+
+
+@router.post("/banco/al-abrir")
+def bank_sync_on_open(request: Request, conn=Depends(get_db)):
+    """Lo pide el panel al abrirse: mira el banco ahora, estando tú delante."""
+    if not banco.configured(conn) or not banco.present_sync_due(conn):
+        return Response(status_code=200)
+    try:
+        client = banco.Client.from_settings(conn)
+    except banco.BankError:
+        return Response(status_code=200)
+    resultados = banco.sync_all_present(conn, client, psu_headers(request), today(request))
+    nuevos = sum(r["nuevos"] for _, r in resultados)
+    if not nuevos:
+        return Response(status_code=200)
+    return render(request, "partials/banco_nuevos.html", {"nuevos": nuevos})
+
+
 @router.post("/banco/{link_id:int}/sincronizar")
 def bank_sync_now(request: Request, link_id: int, conn=Depends(get_db)):
     link = conn.execute("SELECT * FROM bank_links WHERE id = ?", (link_id,)).fetchone()
@@ -1325,7 +1356,10 @@ def bank_sync_now(request: Request, link_id: int, conn=Depends(get_db)):
         client = banco.Client.from_settings(conn)
     except banco.BankError as e:
         return redirect(request, "/banco", str(e), "error")
-    r = banco.sync_link(conn, client, link, today(request))
+    # lo pulsas tú: va con las cabeceras de «estoy delante» y no gasta de las 4 diarias
+    r = banco.sync_link(conn, client.with_psu(psu_headers(request)), link, today(request))
+    if r.get("error") and "PSU" in r["error"].upper():
+        r = banco.sync_link(conn, client, link, today(request))
     return redirect(request, "/banco", f"{link['aspsp_name']}: {banco.summary_text(r)}.",
                     "error" if r.get("error") else "ok")
 
