@@ -568,3 +568,55 @@
     window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
   }
 })();
+
+// 3.4 · Que se sienta como una app (igual que Japón y Pumpcast):
+// - Al tocar una pestaña, la lente se desliza ya, sin esperar a que llegue la pantalla.
+// - Lo que se toca se hunde un poco y se ilumina donde lo pisas.
+// - Al bajar, la barra se encoge; al subir, vuelve. En el móvil hace scroll «main», no la página.
+(() => {
+  const PULSABLE = '.btn, .mini, .chip, .fab, .boton-redondo, .tabs > a, .subnav a, .month-nav a, a.card, .tx, .fila';
+  const soltar = () => {
+    document.querySelectorAll('.yendo').forEach((el) => el.classList.remove('yendo'));
+    document.querySelectorAll('[data-yendo]').forEach((el) => delete el.dataset.yendo);
+  };
+  document.addEventListener('pointerdown', (evento) => {
+    if (evento.button) return;
+    const pestana = evento.target.closest('.tabs > a');
+    if (pestana && !pestana.classList.contains('on')) {
+      soltar();
+      pestana.classList.add('yendo');
+      pestana.parentElement.dataset.yendo = '';
+    }
+    const pulsado = evento.target.closest(PULSABLE);
+    if (!pulsado) return;
+    const r = pulsado.getBoundingClientRect();
+    pulsado.style.setProperty('--mx', (evento.clientX - r.left) + 'px');
+    pulsado.style.setProperty('--my', (evento.clientY - r.top) + 'px');
+    pulsado.classList.add('pulsado');
+    const fuera = () => {
+      pulsado.classList.remove('pulsado');
+      window.removeEventListener('pointerup', fuera);
+      window.removeEventListener('pointercancel', fuera);
+    };
+    window.addEventListener('pointerup', fuera);
+    window.addEventListener('pointercancel', fuera);
+  });
+  // si al final no se cambia de pantalla (se arrastró o falló), la lente vuelve a su sitio
+  window.addEventListener('pointercancel', soltar);
+  window.addEventListener('pageshow', soltar);
+  document.addEventListener('htmx:responseError', soltar);
+  document.addEventListener('htmx:sendError', soltar);
+
+  const raiz = document.documentElement;
+  let ultimaY = 0;
+  document.addEventListener('scroll', (evento) => {
+    const caja = evento.target === document ? document.scrollingElement : evento.target;
+    if (!caja || (caja.id !== 'main' && caja !== document.scrollingElement)) return;
+    const y = caja.scrollTop, dy = y - ultimaY;
+    if (Math.abs(dy) < 6) return;
+    raiz.classList.toggle('barra-mini', dy > 0 && y > 160);
+    ultimaY = y;
+  }, { capture: true, passive: true });
+  // pantalla nueva: la barra, entera otra vez
+  document.addEventListener('htmx:afterSettle', () => { raiz.classList.remove('barra-mini'); ultimaY = 0; });
+})();

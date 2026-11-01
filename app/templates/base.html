@@ -4,9 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{% block title %}Finanzas{% endblock %}</title>
-<meta name="theme-color" content="#eef4f8" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#070c11" media="(prefers-color-scheme: dark)">
-<link rel="preload" href="/static/fonts/nunito.woff2" as="font" type="font/woff2" crossorigin>
+<meta name="theme-color" content="#e8eff5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#04090f" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Finanzas">
@@ -39,6 +38,8 @@
 
 {% if not hide_nav %}
 <nav class="tabs" aria-label="Secciones">
+  {#- La lente de cristal bajo la pestaña activa (en el móvil): se coloca con CSS y se desliza con muelle -#}
+  <span class="lente" aria-hidden="true"></span>
   <div class="side-head">
     <span class="side-title">Finanzas</span>
     <a class="btn btn-primary side-add" href="/nuevo" hx-boost="false" data-qa="{}">+ Apuntar</a>
