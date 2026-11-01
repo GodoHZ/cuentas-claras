@@ -1345,3 +1345,8 @@ dialog.sheet[open] { animation: subir .55s var(--muelle); }
 .pulsado { background-image: radial-gradient(140px circle at var(--mx, 50%) var(--my, 50%), var(--brillo), transparent 70%); }
 .btn.pulsado, .fab.pulsado, .boton-redondo.pulsado, .mini.pulsado, .chip.pulsado span { transform: scale(.95); }
 .tx.pulsado, .fila.pulsado, a.card.pulsado { background-image: none; }
+/* 3.4.1: la hoja de apuntar, casi opaca (como las de iOS): con el cristal fino se leía lo de detrás */
+dialog.sheet, .sheet-head { background: color-mix(in srgb, var(--surface) 97%, transparent); }
+/* 3.4.2: la hoja sube con muelle solo moviéndose (sin aparecer desde transparente): así nunca se queda invisible */
+dialog.sheet[open] { animation: subir-hoja .55s var(--muelle); }
+@keyframes subir-hoja { from { transform: translateY(48px); } }

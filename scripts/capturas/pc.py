@@ -13,7 +13,7 @@ with sync_playwright() as p:
     pag.on("pageerror", lambda e: notas.append("error JS: " + str(e)))
     for nombre, ruta in PAGINAS:
         pag.goto(BASE + ruta, wait_until="networkidle")
-        pag.screenshot(path=f"/out/{nombre}.png", full_page=(nombre == "pc-panel"))
+        pag.screenshot(path=f"/out/{nombre}.png")   # sin página entera: el menú fijo saldría cortado
         if pag.evaluate("document.documentElement.scrollWidth") > 1280:
             notas.append(f"{ruta}: se sale a lo ancho")
         hueco = pag.evaluate("""() => {
