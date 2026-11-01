@@ -17,22 +17,30 @@
     <span class="amount-eur" aria-hidden="true">€</span>
   </label>
 
-  <fieldset class="types">
+  {# Tres tipos. «Mover» junta lo que no es ni gastar ni cobrar: pasar dinero de una cuenta a otra
+     o meterlo en un sobre o sacarlo de él. #}
+  {% set movimiento = f.tipo in ("traspaso", "aporte_sobre", "retiro_sobre") %}
+  <fieldset class="types tres">
     <legend class="sr">Tipo de movimiento</legend>
-    {% for key, label, hint in [("gasto", "Gasto", "Pago algo"), ("ingreso", "Ingreso", "Cobro algo"),
-                                ("aporte_sobre", "Aporte a sobre", "Guardo en un sobre"),
-                                ("retiro_sobre", "Retiro de sobre", "Saco del sobre"),
-                                ("traspaso", "Traspaso", "Muevo dinero entre cuentas")] %}
+    {% for key, label in [("gasto", "Gasto"), ("ingreso", "Ingreso"), ("mover", "Mover")] %}
     <label class="type type-{{ key }}">
-      <input type="radio" name="tipo" value="{{ key }}" {% if f.tipo == key %}checked{% endif %}>
-      <span><b>{{ label }}</b><small>{{ hint }}</small></span>
+      <input type="radio" name="tipo" value="{{ key }}" {% if f.tipo == key or (key == "mover" and movimiento) %}checked{% endif %}>
+      <span><b>{{ label }}</b></span>
     </label>
     {% endfor %}
   </fieldset>
+  <div class="field" data-show="mover">
+    <div class="chips">
+      {% for key, label in [("traspaso", "Entre cuentas"), ("aporte_sobre", "A un sobre"), ("retiro_sobre", "De un sobre")]
+            if usa.sobres or key == "traspaso" %}
+      <label class="chip"><input type="radio" name="mover" value="{{ key }}" {% if f.tipo == key or (key == "traspaso" and not movimiento) %}checked{% endif %}><span>{{ label }}</span></label>
+      {% endfor %}
+    </div>
+  </div>
 
 {# las 8 más usadas a la vista; el resto detrás de «Ver todas» #}
 {% macro chips_categorias(lista, grupo, fid, elegida) %}
-  <input class="more-toggle" type="checkbox" id="{{ fid }}-mas-{{ grupo }}" aria-hidden="true" tabindex="-1">
+  <input class="more-toggle" type="checkbox" id="{{ fid }}-mas-{{ grupo }}" aria-hidden="true" tabindex="-1" aria-label="Ver todas las categorías">
   <div class="chips">
     {% for c in lista %}
     <label class="chip{{ ' extra' if loop.index0 >= 8 }}"><input type="radio" name="categoria_id" value="{{ c.id }}" {% if elegida == c.id %}checked{% endif %}><span>{{ c.name }}</span></label>
@@ -50,6 +58,7 @@
     {{ chips_categorias(opts.cats_ingreso, "i", fid, f.categoria_id) }}
   </div>
 
+  {% if usa.sobres %}
   <div class="field" data-show="gasto aporte retiro">
     <p class="legend" data-show="gasto">¿Lo pagas con dinero de un sobre?</p>
     <p class="legend" data-show="aporte">¿En qué sobre lo guardas?</p>
@@ -61,6 +70,21 @@
       {% endfor %}
     </div>
   </div>
+  {% endif %}
+
+  {# Un ingreso que no es tuyo del todo (el Bizum de un viaje, un regalo para algo): se apunta el
+     ingreso y, a la vez, un aporte que lo aparta en el sobre, sin moverlo de cuenta. #}
+  {% if usa.sobres %}
+  <div class="field" data-show="ingreso">
+    <p class="legend">¿Lo apartas en un sobre?</p>
+    <div class="chips">
+      <label class="chip"><input type="radio" name="sobre_ingreso" value="" checked><span>No, es para gastar</span></label>
+      {% for e in opts.envelopes %}
+      <label class="chip chip-env"><input type="radio" name="sobre_ingreso" value="{{ e.id }}"><span>{{ e.name }}</span></label>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
 
   {# La cuenta del movimiento. En un aporte o un retiro no se pregunta: el dinero
      del sobre vive en la cuenta del sobre. #}
@@ -95,11 +119,36 @@
     </div>
   </div>
 
+  {# Casi nunca hace falta: el «mes» sale de la fecha (de nómina a nómina). Para lo raro, como un
+     pago del mes que viene hecho por adelantado. #}
+  {% set cm = f.cuenta_mes if f.cuenta_mes is defined else "" %}
+  <details class="field otro-mes" {% if cm %}open{% endif %}>
+    <summary class="legend">¿Cuenta para otro mes?</summary>
+    <div class="chips">
+      <label class="chip"><input type="radio" name="cuenta_mes" value="" {% if not cm %}checked{% endif %}><span>No, el de su fecha</span></label>
+      <label class="chip"><input type="radio" name="cuenta_mes" value="+1" {% if cm == "+1" %}checked{% endif %}><span>El siguiente</span></label>
+      <label class="chip"><input type="radio" name="cuenta_mes" value="-1" {% if cm == "-1" %}checked{% endif %}><span>El anterior</span></label>
+    </div>
+  </details>
+
   <div class="field">
     <label class="legend" for="{{ fid }}-concepto">Concepto <span class="muted">(opcional)</span></label>
     <input id="{{ fid }}-concepto" name="concepto" value="{{ f.concepto }}" maxlength="200" autocomplete="off"
            placeholder="Ej.: cena con amigos" enterkeyhint="done">
   </div>
+
+  {% if not dialog %}
+  {# Etiquetas libres para juntar gastos de varias categorías (un viaje, la Navidad): ver /etiquetas #}
+  <div class="field">
+    <input type="hidden" name="pregunta_etiquetas" value="1">
+    <label class="legend" for="{{ fid }}-etiquetas">Etiquetas <span class="muted">(opcional, separadas por comas)</span></label>
+    <input id="{{ fid }}-etiquetas" name="etiquetas" value="{{ etiquetas if etiquetas is defined else '' }}" maxlength="200"
+           autocomplete="off" list="{{ fid }}-etiquetas-lista" placeholder="Ej.: Roma 2026">
+    {% if todas_etiquetas is defined and todas_etiquetas %}
+    <datalist id="{{ fid }}-etiquetas-lista">{% for t in todas_etiquetas %}<option value="{{ t }}">{% endfor %}</datalist>
+    {% endif %}
+  </div>
+  {% endif %}
 
   <button type="submit" class="btn btn-primary btn-block">{{ submit_label or ("Apuntar" if dialog else "Guardar cambios") }}</button>
 </form>

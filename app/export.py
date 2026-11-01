@@ -32,6 +32,8 @@ def as_dict(conn, exported_at: str, version: str) -> dict:
         "movimientos": [{**dict(r), "amount": _euros(r["amount"])} for r in repo.tx_rows(conn, oldest_first=True)],
         "cuadres": [{**dict(r), "balance": _euros(r["balance"])}
                     for r in conn.execute("SELECT * FROM account_checks ORDER BY date, id")],
+        "me_deben": [{**dict(r), "amount": _euros(r["amount"])} for r in conn.execute("SELECT * FROM owed ORDER BY date, id")],
+        "documentos": [dict(r) for r in conn.execute("SELECT * FROM tx_docs ORDER BY tx_id, id")],
     }
 
 

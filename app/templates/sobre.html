@@ -1,18 +1,51 @@
 {% extends "base.html" %}
-{% from "_macros.html" import envelope_card %}
+{% from "_macros.html" import envelope_card, sobre_campos with context %}
 {% from "_iconos.html" import icono %}
 {% block title %}{{ env.name }} · Finanzas{% endblock %}
 {% block heading %}{{ env.name }}{% endblock %}
 {% block main %}
 {{ envelope_card({"env": env, "st": st}, link=False) }}
+{% if st.needed and not st.done %}
+<section class="card meta-fecha {{ 'ok' if st.on_track else 'tarde' }}">
+  <p><strong>Para tener {{ st.target|eur }} en {{ month_name(st.deadline[0], st.deadline[1]) }}</strong>
+    te faltan {{ st.missing|eur }}: <b class="num">{{ st.needed|eur }} al mes</b> durante {{ st.months_left }} mes{{ 'es' if st.months_left != 1 }}{{ ' (este incluido)' if st.months_left > 1 }}.</p>
+  {% if st.on_track %}
+  <p class="hint">{{ icono("check") }} Guardando {{ st.monthly|eur }} al mes llegas a tiempo{% if st.eta %} (en {{ month_name(st.eta[0], st.eta[1]) }}){% endif %}.</p>
+  {% else %}
+  <p class="hint">{% if st.monthly %}Guardando {{ st.monthly|eur }} al mes llegarías en {{ month_name(st.eta[0], st.eta[1]) }}: tarde.{% else %}Ahora no guardas nada al mes en este sobre.{% endif %}</p>
+  <form method="post" action="/sobres/{{ env.id }}/aporte-meta">
+    <button class="btn btn-small btn-primary" type="submit">Guardar {{ st.needed|eur }} al mes</button></form>
+  {% endif %}
+</section>
+{% endif %}
 {% if env.note %}<p class="note">{{ icono("nota") }} {{ env.note }}</p>{% endif %}
+{% if gastado %}
+<form class="card aviso-revisar" method="post" action="/ajustes/lista/sobres/{{ env.id }}/archivar">
+  <input type="hidden" name="volver" value="/sobres">
+  {{ icono("check") }}
+  <span><strong>Ya lo has gastado</strong>
+    <span class="muted">Era para algo puntual y está a cero. ¿Lo archivas? Su historial se queda.</span></span>
+  <button class="btn btn-small btn-primary" type="submit">Archivar</button>
+</form>
+{% endif %}
 
 <div class="actions">
   <a class="btn" href="/nuevo" hx-boost="false" data-qa='{"tipo": "aporte_sobre", "sobre": {{ env.id }}}'>Aportar</a>
   <a class="btn" href="/nuevo" hx-boost="false" data-qa='{"tipo": "gasto", "sobre": {{ env.id }}}'>Gastar</a>
   <a class="btn" href="/nuevo" hx-boost="false" data-qa='{"tipo": "retiro_sobre", "sobre": {{ env.id }}}'>Retirar</a>
 </div>
-<p class="hint">Aportar: guardas dinero en el sobre. Gastar: pagas algo con ese dinero. Retirar: lo sacas del sobre sin gastarlo.</p>
+<details class="card nuevo-fijo">
+  <summary>{{ icono("editar") }} Editar el sobre</summary>
+  <form method="post" action="/ajustes/lista/sobres/{{ env.id }}" class="stack">
+    <input type="hidden" name="volver" value="/sobres/{{ env.id }}">
+    {{ sobre_campos(env, accounts, none) }}
+    <button class="btn btn-primary" type="submit">Guardar</button>
+  </form>
+  <form method="post" action="/ajustes/lista/sobres/{{ env.id }}/archivar">
+    <input type="hidden" name="volver" value="/sobres">
+    <button class="link" type="submit">{{ "Archivar" if env.active else "Reactivar" }} el sobre</button>
+  </form>
+</details>
 
 <h2 class="section-title">Historial</h2>
 {% if history %}

@@ -183,9 +183,9 @@ def test_el_panel_ensena_lo_que_quedara(db_path, tmp_path):
                           today_fn=lambda: date(2026, 10, 1))
     with TestClient(app) as client:
         html = client.get("/").text
-    assert "Previsto este mes" in html
+    assert "Por pagar y guardar" in html
     assert "Puedes gastar" in html
     assert "1.420,00" in html                       # 1.800 que tienes − 180 − 200
-    assert "se carga el día 15" in html
-    assert "Libre de este mes" in html and "1.500,00" in html      # el mes, aparte y sin protagonismo
-    assert "Cuenta corriente" in html and "no suma" not in html
+    assert "el 15/10" in html
+    assert "Has cobrado" in html and "1.500,00" in html            # el mes, aparte y sin protagonismo
+    assert "Cuenta corriente" in html and "aparte</span>" not in html

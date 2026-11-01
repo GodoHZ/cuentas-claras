@@ -34,3 +34,7 @@ def today() -> date:
 
 # Clave de la API (/api/...). Vacía = API apagada.
 API_KEY = os.environ.get("API_KEY", "").strip()
+# el cierre de cada mes, por Telegram (opcional; ver app/avisos.py)
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "").strip()
+TELEGRAM_CHAT = os.environ.get("TELEGRAM_CHAT", "").strip()
+TELEGRAM_THREAD = os.environ.get("TELEGRAM_THREAD", "").strip()

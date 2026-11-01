@@ -4,6 +4,7 @@
 <{{ 'a' if link else 'div' }} class="card env-card{{ ' done' if st.done }}" {% if link %}href="/sobres/{{ e.id }}"{% endif %}>
   <div class="env-top">
     <span class="env-name">{{ e.name }}{% if not e.active %} <span class="badge">archivado</span>{% endif %}
+      {%- if e.temporary %} <span class="badge">puntual</span>{% endif %}
       {%- if c.account %} <small class="muted">en {{ c.account }}</small>{% endif %}</span>
     <span class="env-balance num">{{ st.balance|eur }}</span>
   </div>
@@ -11,21 +12,50 @@
   <div class="bar bar-env" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ (st.progress * 100)|round|int }}"
        aria-label="Progreso de {{ e.name }}"><span style="width: {{ (st.progress * 100)|round(1) }}%"></span></div>
   <p class="env-meta">
-    <span>{{ st.progress|pct }} de {{ st.target|eur }}</span>
-    <span class="env-label{{ ' ok' if st.done }}">{% if st.done %}{{ icono("check") }} {% endif %}{{ st.label }}{% if st.months %} para llegar{% endif %}</span>
+    <span>{{ st.progress|pct }} de {{ st.target|eur }}{% if st.deadline %} · para {{ month_short(st.deadline[0], st.deadline[1]) }}{% endif %}</span>
+    <span class="env-label{{ ' ok' if st.done or st.on_track }}{{ ' tarde' if st.on_track == false }}">
+      {%- if st.done %}{{ icono("check") }} ¡Conseguido!
+      {%- elif st.needed %}{% if st.on_track %}{{ icono("check") }} llegas a tiempo{% else %}guarda {{ st.needed|eur }}/mes{% endif %}
+      {%- elif st.months %}{{ st.label }} para llegar{% elif st.missing %}te faltan {{ st.missing|eur }}{% endif %}</span>
   </p>
-  {% if st.missing %}<p class="hint">Te faltan {{ st.missing|eur }}{% if st.monthly %} · guardas {{ st.monthly|eur }} al mes{% endif %}</p>{% endif %}
-  {% else %}
-  <p class="env-meta"><span class="muted">{{ st.label }}</span>{% if st.monthly %}<span>Guardas {{ st.monthly|eur }} al mes</span>{% endif %}</p>
+  {% elif st.monthly %}
+  <p class="env-meta"><span>Guardas {{ st.monthly|eur }} al mes</span></p>
   {% endif %}
 </{{ 'a' if link else 'div' }}>
+{% endmacro %}
+
+{# Los campos de un sobre (crear o editar), con palabras de andar por casa #}
+{% macro sobre_campos(e, accounts, cuenta_por_defecto) %}
+{% set uid = e.id if e else "nuevo" %}
+<label class="legend" for="s{{ uid }}-nombre">Nombre</label>
+<input id="s{{ uid }}-nombre" name="nombre" value="{{ e.name if e }}" maxlength="60" required placeholder="Ej.: Vacaciones">
+<div class="field-row">
+  <div class="stack"><label class="legend" for="s{{ uid }}-objetivo">Meta <span class="muted">(opcional)</span></label>
+    <input id="s{{ uid }}-objetivo" name="objetivo" inputmode="decimal" value="{{ e.target|importe_input if e }}" placeholder="1.000"></div>
+  <div class="stack"><label class="legend" for="s{{ uid }}-aporte">Guardar al mes <span class="muted">(opcional)</span></label>
+    <input id="s{{ uid }}-aporte" name="aporte" inputmode="decimal" value="{{ e.monthly|importe_input if e }}" placeholder="50"></div>
+</div>
+<input type="hidden" name="pregunta_fecha" value="1">
+<label class="legend" for="s{{ uid }}-fecha">¿Para cuándo? <span class="muted">(opcional: con meta, te digo cuánto guardar al mes)</span></label>
+<input id="s{{ uid }}-fecha" name="fecha_meta" type="month" value="{{ e.target_date if e and e.target_date }}" placeholder="2027-07">
+<input type="hidden" name="pregunta_temporal" value="1">
+<label class="check"><input type="checkbox" name="temporal" value="1" {% if e and e.temporary %}checked{% endif %}>
+  Es para algo puntual (un viaje, un regalo): cuando lo gastes, te ofrezco archivarlo</label>
+<label class="legend" for="s{{ uid }}-cuenta">¿En qué cuenta está el dinero?</label>
+<select id="s{{ uid }}-cuenta" name="cuenta">
+  {% for a in accounts %}<option value="{{ a.id }}" {% if (e and e.account_id == a.id) or (not e and cuenta_por_defecto == a.id) %}selected{% endif %}>{{ a.name }}</option>{% endfor %}
+</select>
+<label class="legend" for="s{{ uid }}-nota">Nota <span class="muted">(opcional)</span></label>
+<input id="s{{ uid }}-nota" name="nota" value="{{ e.note if e }}" maxlength="200">
 {% endmacro %}
 
 {% macro month_nav(base, year, month, extra="") %}
 {% set py, pm = add_months(year, month, -1) %}{% set ny, nm = add_months(year, month, 1) %}
 <div class="month-nav">
   <a href="{{ base }}?mes={{ month_key(py, pm) }}{{ extra }}" aria-label="Mes anterior">‹</a>
-  <strong>{{ month_name(year, month, True) }}</strong>
+  {% set r = rango_mes(year, month) if rango_mes is defined else none %}
+  <strong>{{ month_name(year, month, True) }}
+    {%- if r %}<small class="rango">del {{ r.desde.strftime('%d/%m') }} al {{ '~' if r.estimado }}{{ r.hasta.strftime('%d/%m') }}</small>{% endif %}</strong>
   <a href="{{ base }}?mes={{ month_key(ny, nm) }}{{ extra }}" aria-label="Mes siguiente">›</a>
 </div>
 {% endmacro %}
@@ -35,8 +65,9 @@
 <a class="tx tx-{{ r.type }}" href="/movimientos/{{ r.id }}">
   <span class="tx-dot" aria-hidden="true"></span>
   <span class="tx-main">
-    <span class="tx-title">{{ r.concept or r.category or r.envelope }}
-      {%- if r.review %} <span class="badge badge-revisar">revisar</span>{% endif %}</span>
+    <span class="tx-title">{{ (r.concept|limpio) or r.category or r.envelope }}
+      {%- if r.review %} <span class="badge badge-revisar">revisar</span>{% endif %}
+      {%- if r.tags %} <span class="badge badge-etiqueta">{{ r.tags }}</span>{% endif %}</span>
     <span class="tx-sub">
       {%- if r.type == 'traspaso' %}{{ r.other_account }} → {{ r.account }}
       {%- elif r.type == 'aporte_sobre' %}Aporte a «{{ r.envelope }}»{% if r.other_account %} · desde {{ r.other_account }}{% else %} · {{ r.account }}{% endif %}
@@ -79,4 +110,15 @@
   <p class="hint">Gastado {{ line.spent|eur }} (no tiene presupuesto mensual)</p>
   {% endif %}
 </div>
+{% endmacro %}
+
+{# Las pestañas de Planificar #}
+{% macro subnav_planificar(actual) %}
+<nav class="subnav" aria-label="Planificar">
+  {% for href, key, label in [("/sobres", "sobres", "Sobres"), ("/presupuesto", "presupuesto", "Presupuesto"),
+                               ("/fijos", "fijos", "Pagos fijos"), ("/calendario", "calendario", "Calendario")]
+     if usa is not defined or key not in usa or usa[key] %}
+  <a href="{{ href }}" class="{{ 'on' if actual == key }}" {% if actual == key %}aria-current="page"{% endif %}>{{ label }}</a>
+  {% endfor %}
+</nav>
 {% endmacro %}

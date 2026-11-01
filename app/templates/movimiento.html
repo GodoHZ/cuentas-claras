@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_iconos.html" import icono %}
 {% block title %}Editar movimiento · Finanzas{% endblock %}
 {% block heading %}Editar movimiento{% endblock %}
 {% block main %}
@@ -9,6 +10,46 @@
 <div class="card">
   {% with dialog=False, action="/movimientos/" ~ tx.id %}{% include "partials/txform.html" %}{% endwith %}
 </div>
+
+{% if tx.type == "gasto" %}
+<a class="card fila-enlace" href="/me-deben?desde={{ tx.id }}">
+  <span><strong>Dividir o alguien me debe parte</strong><small class="muted">Una cena de 80 € entre 4: cada uno te debe 20 €. Cuando te lo devuelvan, se da por cobrado solo</small></span>
+  <span aria-hidden="true">›</span>
+</a>
+{% endif %}
+
+{# La factura o el ticket: un enlace (de Paperless o de donde sea) #}
+<section class="card docs" id="documentos">
+  <h2>{{ icono("nota") }} Factura o ticket</h2>
+  {% if docs %}
+  <ul class="plain">
+    {% for d in docs %}
+    <li class="doc-linea">
+      <a href="{{ d.url }}" target="_blank" rel="noopener">{{ d.title or ("Documento " ~ d.paperless_id if d.paperless_id else d.url) }}</a>
+      <form method="post" action="/movimientos/{{ tx.id }}/documentos/{{ d.id }}/quitar">
+        <button class="link danger" type="submit" aria-label="Quitar el enlace">Quitar</button></form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if paperless_api %}
+  <div hx-get="/movimientos/{{ tx.id }}/paperless" hx-trigger="load" hx-swap="outerHTML">
+    <p class="hint">Buscando en Paperless…</p></div>
+  {% endif %}
+  <form method="post" action="/movimientos/{{ tx.id }}/documentos" class="doc-nuevo">
+    <label class="sr" for="doc-url">Enlace del documento</label>
+    <input id="doc-url" name="url" type="url" inputmode="url" placeholder="Pega el enlace del documento" autocomplete="off">
+    <button class="btn btn-small" type="submit">Enlazar</button>
+  </form>
+  {% if paperless_busqueda %}
+  <p class="hint"><a href="{{ paperless_busqueda }}" target="_blank" rel="noopener">Buscar «{{ tx.amount|importe_input }}» en Paperless ›</a>
+    Abre el documento, copia su dirección y pégala aquí.</p>
+  {% elif not docs %}
+  <p class="hint">Si guardas las facturas en Paperless, pon su dirección en <a href="/ajustes?abierto=paperless#paperless">Ajustes</a>
+    y tendrás un botón para buscarlas por el importe.</p>
+  {% endif %}
+</section>
+{% if tx.source == "banco" and tx.concept %}<p class="muted small center">En el banco: {{ tx.concept }}</p>{% endif %}
 
 <form class="danger-zone" method="post" action="/movimientos/{{ tx.id }}/borrar"
       hx-confirm="¿Borrar este movimiento ({{ TYPES[tx.type]|lower }} de {{ tx.amount|eur }} del {{ tx.date|fecha }})? No se puede deshacer.">

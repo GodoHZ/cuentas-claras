@@ -1,0 +1,16 @@
+{# Documentos de Paperless que podrían ser de este movimiento (los carga movimiento.html aparte) #}
+{% if sugeridos %}
+<div class="paperless-sugeridos">
+  <p class="legend">¿Es alguno de estos?</p>
+  <ul class="plain">
+    {% for d in sugeridos %}
+    <li class="doc-linea">
+      <a href="{{ d.url }}" target="_blank" rel="noopener">{{ d.title }} <small class="muted">{{ d.created|fecha if d.created }}</small></a>
+      <form method="post" action="/movimientos/{{ tx.id }}/documentos">
+        <input type="hidden" name="paperless_id" value="{{ d.id }}"><input type="hidden" name="titulo" value="{{ d.title }}">
+        <button class="btn btn-small" type="submit">Es este</button></form>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}

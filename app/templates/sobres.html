@@ -1,13 +1,19 @@
 {% extends "base.html" %}
-{% from "_macros.html" import envelope_card %}
+{% from "_macros.html" import subnav_planificar with context %}
+{% from "_macros.html" import envelope_card, sobre_campos with context %}
+{% from "_iconos.html" import icono %}
 {% block title %}Sobres · Finanzas{% endblock %}
-{% block heading %}Sobres{% endblock %}
+{% block heading %}Planificar{% endblock %}
 {% block main %}
+{{ subnav_planificar("sobres") }}
 <div class="card total-card">
   <p class="label">Total en sobres</p>
   <p class="hero-num num">{{ total_envelopes|eur }}</p>
-  <p class="hint">Todo el dinero que tienes apartado en tus sobres. Cada sobre vive en una cuenta;
-    en <a href="/cuentas">Cuentas</a> ves cuánto de cada cuenta está apartado y cuánto te queda libre.</p>
+  <details class="como">
+    <summary>¿Qué son los sobres?</summary>
+    <p class="hint">Dinero apartado para algo: el ahorro, el coche, un viaje. Sigue en su cuenta, pero ya no cuenta en
+      «Puedes gastar». En <a href="/cuentas">Cuentas</a> ves cuánto de cada cuenta está apartado.</p>
+  </details>
 </div>
 
 <div class="env-grid">
@@ -17,6 +23,13 @@
 <h2 class="section-title">Archivados con saldo</h2>
 <div class="env-grid">{% for c in archived %}{{ envelope_card(c) }}{% endfor %}</div>
 {% endif %}
-<p class="muted small">Para crear, renombrar, archivar u ordenar sobres: <a href="/ajustes?abierto=sobres#sobres">Ajustes › Sobres</a>.</p>
+<details class="card nuevo-fijo">
+  <summary>{{ icono("nuevo") }} Nuevo sobre</summary>
+  <form method="post" action="/ajustes/lista/sobres" class="stack">
+    <input type="hidden" name="volver" value="/sobres">
+    {{ sobre_campos(none, accounts, envelope_account_id) }}
+    <button class="btn btn-primary" type="submit">Crear sobre</button>
+  </form>
+</details>
 
 {% endblock %}

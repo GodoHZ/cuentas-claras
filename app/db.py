@@ -8,9 +8,69 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 12
 
 SCHEMA = """
+-- Reglas propias para lo que trae el banco: si el concepto contiene «pattern», va a esa
+-- categoría (y, si se elige, a ese sobre). Mandan sobre lo que la app aprende sola.
+CREATE TABLE IF NOT EXISTS rules (
+    id          INTEGER PRIMARY KEY,
+    pattern     TEXT NOT NULL,
+    kind        TEXT NOT NULL DEFAULT 'gasto' CHECK (kind IN ('gasto', 'ingreso')),
+    category_id INTEGER REFERENCES categories(id),
+    envelope_id INTEGER REFERENCES envelopes(id),
+    position    INTEGER NOT NULL DEFAULT 0
+);
+
+-- Lo que te deben: pagaste tú (un Airbnb, una cena) y alguien te lo devolverá. Cuando llega un
+-- ingreso por ese importe, se da por cobrado (settled_tx_id es ese ingreso).
+CREATE TABLE IF NOT EXISTS owed (
+    id            INTEGER PRIMARY KEY,
+    person        TEXT NOT NULL,
+    concept       TEXT NOT NULL DEFAULT '',
+    amount        INTEGER NOT NULL CHECK (amount > 0),
+    date          TEXT NOT NULL,
+    settled_tx_id INTEGER REFERENCES transactions(id) ON DELETE SET NULL,
+    settled_date  TEXT,
+    created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+-- Lo que el banco tiene retenido y aún no ha contabilizado (un pago con tarjeta de hace un rato). Se
+-- rehace entero en cada sincronización: cuando el banco lo contabiliza, deja de estar aquí y llega
+-- como un movimiento normal. No se exporta: es solo lo que dijo el banco la última vez.
+CREATE TABLE IF NOT EXISTS bank_pending (
+    id         INTEGER PRIMARY KEY,
+    account_id INTEGER NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    date       TEXT NOT NULL,
+    amount     INTEGER NOT NULL,              -- con signo: negativo, sale dinero
+    concept    TEXT NOT NULL DEFAULT '',
+    seen_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+-- Etiquetas libres para juntar gastos de varias categorías: un viaje («Roma 2026»), la Navidad...
+CREATE TABLE IF NOT EXISTS tags (
+    id         INTEGER PRIMARY KEY,
+    name       TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+CREATE TABLE IF NOT EXISTS tx_tags (
+    tx_id  INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    PRIMARY KEY (tx_id, tag_id)
+);
+CREATE INDEX IF NOT EXISTS ix_tx_tags_tag ON tx_tags(tag_id);
+
+-- La factura o el ticket de un movimiento, en Paperless (o en cualquier otro sitio: es un enlace)
+CREATE TABLE IF NOT EXISTS tx_docs (
+    id          INTEGER PRIMARY KEY,
+    tx_id       INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+    url         TEXT NOT NULL,
+    title       TEXT NOT NULL DEFAULT '',
+    paperless_id INTEGER,                 -- el número del documento, si es de Paperless
+    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    UNIQUE (tx_id, url)
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT
@@ -33,6 +93,10 @@ CREATE TABLE IF NOT EXISTS envelopes (
     note     TEXT NOT NULL DEFAULT '',
     -- en qué cuenta vive el dinero de este sobre
     account_id INTEGER REFERENCES accounts(id),
+    -- 1 = para algo puntual (un viaje): cuando se gasta, la app ofrece archivarlo
+    temporary INTEGER NOT NULL DEFAULT 0,
+    -- para cuándo quieres llegar a la meta ('2027-07'); vacío = sin fecha
+    target_date TEXT,
     position INTEGER NOT NULL DEFAULT 0,
     active   INTEGER NOT NULL DEFAULT 1
 );
@@ -71,6 +135,9 @@ CREATE TABLE IF NOT EXISTS transactions (
     -- 1 = la categoría es una suposición y conviene mirarla. Se apaga al
     -- guardar el movimiento desde la app
     review      INTEGER NOT NULL DEFAULT 0,
+    -- el mes al que cuenta ('2026-11'), si no es el de su fecha: la nómina que llega
+    -- el 28 es para el mes siguiente. Vacío = el de la fecha
+    month       TEXT,
     CHECK (type NOT IN ('aporte_sobre', 'retiro_sobre') OR envelope_id IS NOT NULL),
     CHECK (type NOT IN ('ingreso', 'gasto') OR category_id IS NOT NULL),
     CHECK (type <> 'traspaso' OR (other_account_id IS NOT NULL AND other_account_id <> account_id))
@@ -85,7 +152,10 @@ CREATE TABLE IF NOT EXISTS loans (
     name           TEXT NOT NULL,
     installment    INTEGER NOT NULL CHECK (installment > 0),
     first_date     TEXT NOT NULL,
-    n_installments INTEGER NOT NULL CHECK (n_installments > 0),
+    -- cuántas cuotas tiene; vacío = sin fin (una suscripción, un seguro que se renueva...)
+    n_installments INTEGER CHECK (n_installments IS NULL OR n_installments > 0),
+    -- qué es: un préstamo (cuenta para «cuotas / nómina»), un seguro, una suscripción u otro pago fijo
+    kind           TEXT NOT NULL DEFAULT 'prestamo' CHECK (kind IN ('prestamo', 'seguro', 'suscripcion', 'otro')),
     -- con qué categoría apuntas la cuota: sirve para saber si la del mes ya
     -- está apuntada y descontarla de lo previsto
     category_id    INTEGER REFERENCES categories(id),
@@ -180,6 +250,31 @@ def migrar(conn) -> None:
         conn.execute("ALTER TABLE transactions ADD COLUMN source TEXT")
     if "review" not in columnas:
         conn.execute("ALTER TABLE transactions ADD COLUMN review INTEGER NOT NULL DEFAULT 0")
+    if "month" not in columnas:                                           # versión 7 -> 8
+        conn.execute("ALTER TABLE transactions ADD COLUMN month TEXT")
+
+    columnas_prestamos = {r["name"] for r in conn.execute("PRAGMA table_info(loans)")}
+    if columnas_prestamos and "kind" not in columnas_prestamos:            # versión 8 -> 9
+        _a_la_version_9(conn)
+    columnas_sobres = {r["name"] for r in conn.execute("PRAGMA table_info(envelopes)")}
+    if columnas_sobres and "temporary" not in columnas_sobres:
+        conn.execute("ALTER TABLE envelopes ADD COLUMN temporary INTEGER NOT NULL DEFAULT 0")
+    if columnas_sobres and "target_date" not in columnas_sobres:           # versión 11 -> 12
+        conn.execute("ALTER TABLE envelopes ADD COLUMN target_date TEXT")
+
+
+def _a_la_version_9(conn) -> None:
+    """Los préstamos pasan a ser «pagos fijos»: con tipo y, si no tienen fin, sin número de cuotas.
+
+    Como en la versión 3, hay que rehacer la tabla (el número de cuotas era obligatorio y SQLite no
+    sabe quitar un NOT NULL). Los que se llaman «seguro…» pasan a ser seguros.
+    """
+    conn.execute("ALTER TABLE loans RENAME TO loans_v8")
+    conn.executescript(SCHEMA)
+    conn.execute("INSERT INTO loans (id, name, installment, first_date, n_installments, category_id, position) "
+                 "SELECT id, name, installment, first_date, n_installments, category_id, position FROM loans_v8")
+    conn.execute("UPDATE loans SET kind = 'seguro' WHERE name LIKE 'seguro%' COLLATE NOCASE")
+    conn.execute("DROP TABLE loans_v8")
 
 
 def _a_la_version_3(conn) -> None:

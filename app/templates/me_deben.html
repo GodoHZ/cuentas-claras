@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% from "_iconos.html" import icono %}
+{% block title %}Me deben · Finanzas{% endblock %}
+{% block heading %}Me deben{% endblock %}
+{% block main %}
+<section class="card hero">
+  <p class="label">Te deben</p>
+  <p class="hero-num num">{{ total|eur }}</p>
+  <details class="como">
+    <summary>¿Cómo funciona?</summary>
+    <p class="hint">Cuando pagas algo de otros (un Airbnb, una cena), apunta aquí quién te debe cuánto. Al llegar un
+      ingreso por ese importe —el Bizum que trae el banco o uno que apuntes tú—, la app lo da por cobrado sola. Si
+      hay dudas, se fija en si el concepto lleva su nombre («Bizum de Pol»).</p>
+  </details>
+</section>
+
+{% if pendiente %}
+<section class="card">
+  <h2>Pendiente</h2>
+  {% for o in pendiente %}
+  <div class="deuda">
+    <span><strong>{{ o.person }}</strong> <small>{{ o.concept }}{% if o.concept %} · {% endif %}desde el {{ o.date|fecha }}</small></span>
+    <span class="num strong">{{ o.amount|eur }}</span>
+    <div class="acciones-deuda">
+      <form method="post" action="/me-deben/{{ o.id }}/cobrado"><button class="link" type="submit">Ya me lo ha dado</button></form>
+      <form method="post" action="/me-deben/{{ o.id }}/borrar" hx-confirm="¿Borrar lo que te debe {{ o.person }}?">
+        <button class="link danger" type="submit">Borrar</button></form>
+    </div>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+<details class="card nuevo-fijo" {% if base or not pendiente %}open{% endif %}>
+  <summary>{{ icono("nuevo") }} Alguien me debe… o dividir un gasto</summary>
+  <form method="post" action="/me-deben" class="stack" data-dividir>
+    <label class="check"><input type="checkbox" name="dividir" value="1" {% if base %}checked{% endif %}>
+      Dividir un gasto entre varios</label>
+    <div class="field-row">
+      <div class="stack"><label class="legend" for="d-persona"><span data-solo="uno">¿Quién?</span><span data-solo="varios">¿Entre quiénes? <span class="muted">(con comas)</span></span></label>
+        <input id="d-persona" name="persona" maxlength="400" required placeholder="Ej.: Pol" autocomplete="off"
+               data-placeholder-varios="Ej.: Pol, Ana, Marc"></div>
+      <div class="stack"><label class="legend" for="d-importe"><span data-solo="uno">¿Cuánto?</span><span data-solo="varios">¿Cuánto fue en total?</span></label>
+        <input id="d-importe" name="importe" inputmode="decimal" placeholder="0,00"
+               value="{{ base.amount|importe_input if base }}"></div>
+    </div>
+    <label class="check" data-solo="varios"><input type="checkbox" name="yo_tambien" value="1" checked>
+      Yo también pago mi parte</label>
+    <p class="reparto-cuota" data-solo="varios" data-cuota aria-live="polite"></p>
+    <label class="legend" for="d-concepto">¿De qué? <span class="muted">(opcional)</span></label>
+    <input id="d-concepto" name="concepto" maxlength="120" value="{{ (base.concept|limpio) if base }}" placeholder="Ej.: Airbnb Valencia">
+    <label class="legend" for="d-fecha">Fecha</label>
+    <input id="d-fecha" name="fecha" type="date" value="{{ base.date if base else hoy.isoformat() }}">
+    {% if base %}<p class="hint" data-solo="uno">Del gasto «{{ base.concept|limpio or base.category }}» de {{ base.amount|eur }}: pon solo la
+      parte que te deben.</p>{% endif %}
+    <button class="btn btn-primary" type="submit">Apuntar</button>
+  </form>
+</details>
+
+{% if cobrado %}
+<h2 class="section-title">Cobrado</h2>
+<div class="card list compacta">
+  {% for o in cobrado %}
+  <div class="fila">
+    <span class="fila-nombre">{{ o.person }} <small class="muted">{{ o.concept }}{% if o.settled_on %} · llegó el {{ o.settled_on|fecha }}{% elif o.settled_date %} · dado por cobrado el {{ o.settled_date|fecha }}{% endif %}</small></span>
+    <span class="num ok-texto">{{ icono("check") }} {{ o.amount|eur }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

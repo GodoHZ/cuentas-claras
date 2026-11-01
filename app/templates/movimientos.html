@@ -1,12 +1,68 @@
 {% extends "base.html" %}
-{% from "_macros.html" import month_nav, tx_row %}
+{% from "_macros.html" import month_nav, tx_row with context %}
+{% from "_iconos.html" import icono %}
 {% block title %}Movimientos · Finanzas{% endblock %}
 {% block heading %}Movimientos{% endblock %}
 {% block main %}
-{% if all_months %}
+{% if etiqueta %}
+<div class="month-nav"><span></span><strong>{{ icono("etiqueta") }} {{ etiqueta.name }}</strong><span></span></div>
+<p class="center small"><a href="/etiquetas/{{ etiqueta.id }}">Ver el resumen de «{{ etiqueta.name }}»</a> · <a href="/movimientos">Quitar el filtro</a></p>
+{% elif all_months %}
 <div class="month-nav"><span></span><strong>Todos los meses</strong><span></span></div>
 {% else %}
 {{ month_nav("/movimientos", year, month, ("&" ~ filter_qs) if filter_qs else "") }}
+{% endif %}
+
+{% if revisar %}
+{# La bandeja: confirmar lo que trajo el banco con un toque (y cambiar la categoría si no es la buena) #}
+<section class="card bandeja" id="revisar" aria-labelledby="revisar-titulo">
+  <div class="row-between">
+    <h2 id="revisar-titulo">Para revisar <span class="count">{{ revisar|length }}</span></h2>
+    {% if revisar|length > 1 %}
+    <form method="post" action="/movimientos/confirmar-todos" hx-confirm="¿Dar por buenos los {{ revisar|length }}?">
+      <button class="link strong" type="submit">Confirmar todos</button></form>
+    {% endif %}
+  </div>
+  <p class="hint">Los trajo el banco con la categoría que suponía. Si no es la buena, cámbiala antes de confirmar:
+    la próxima vez acertará.</p>
+  {% for r in revisar %}
+  <form class="revisar-fila" method="post" action="/movimientos/{{ r.id }}/confirmar"
+        hx-post="/movimientos/{{ r.id }}/confirmar" hx-target="this" hx-swap="outerHTML swap:.25s">
+    <a class="revisar-que" href="/movimientos/{{ r.id }}">
+      <strong>{{ (r.concept|limpio) or r.category }}</strong>
+      <small>{{ r.date|fecha }} · {{ r.account }}{% if r.type == "traspaso" %} · desde {{ r.other_account }}{% endif %}</small>
+    </a>
+    <span class="num revisar-importe {{ 'ingreso' if r.type == 'ingreso' }}">
+      {%- if r.type == 'ingreso' %}{{ r.amount|eur_sign }}{% elif r.type == 'gasto' %}{{ (0 - r.amount)|eur }}{% else %}{{ r.amount|eur }}{% endif %}</span>
+    {% if r.type in ("gasto", "ingreso") %}
+    <label class="revisar-cat"><span class="sr">Categoría</span>
+      <select name="categoria_id">
+        {% for c in cats_activas[r.type] %}<option value="{{ c.id }}" {% if c.id == r.category_id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+      </select></label>
+    {% elif r.type == "traspaso" and sobres_traspaso[r.id].sobres %}
+    {% set st = sobres_traspaso[r.id] %}
+    <label class="revisar-cat"><span class="sr">¿Va a un sobre?</span>
+      <select name="sobre_id">
+        <option value="">Solo traspaso, sin sobre</option>
+        {% for e in st.sobres %}<option value="{{ e.id }}" {% if e.id == st.sugerido %}selected{% endif %}>Al sobre «{{ e.name }}»</option>{% endfor %}
+      </select></label>
+    {% else %}
+    <span class="revisar-cat muted small">{{ TYPES[r.type] }}</span>
+    {% endif %}
+    <button class="revisar-ok" type="submit" aria-label="Confirmar «{{ (r.concept|limpio) or r.category }}»">{{ icono("check") }}</button>
+  </form>
+  {% endfor %}
+</section>
+{% endif %}
+
+<form class="buscar" action="/movimientos" method="get" role="search">
+  <label class="sr" for="q">Buscar movimientos</label>
+  <input id="q" name="q" type="search" value="{{ q }}" placeholder="Buscar: gasolinera, Mercadona, Bizum…" enterkeyhint="search" autocomplete="off">
+  {% if q %}<a class="link" href="/movimientos">Quitar</a>{% endif %}
+</form>
+{% if q %}
+<p class="month-line">{{ rows|length }} resultado{{ 's' if rows|length != 1 }} de «{{ q }}» en todos los meses ·
+  suman <b class="num {{ 'neg' if q_total < 0 }}">{{ q_total|eur_sign }}</b></p>
 {% endif %}
 
 <form class="filters" action="/movimientos" method="get"
@@ -45,20 +101,31 @@
   {% if filtered %} · <a href="/movimientos?mes={{ 'todos' if all_months else month_key(year, month) }}">Quitar filtros</a>{% endif %}
 </p>
 
-{% if filters.revisar %}
-<p class="note">Gastos que la app apuntó sola en un sitio nuevo, con la categoría supuesta. Toca uno, cámbiala
-  si no es la buena y dale a Guardar: a partir de ahí, ese comercio irá siempre a esa categoría.</p>
-{% endif %}
 
 {% if m and not filtered %}
 <p class="month-line">Ingresos <b class="num">{{ m.income|eur }}</b> · Gastos <b class="num">{{ m.payroll_spent|eur }}</b> · Aportado <b class="num">{{ m.saved|eur }}</b></p>
 {% endif %}
 
 <div id="lista">
+{% if retenidos %}
+<h3 class="day">Retenido en el banco</h3>
+<div class="card list retenidos-lista">
+  {% for r in retenidos %}
+  <div class="tx tx-retenido">
+    <span class="tx-dot" aria-hidden="true"></span>
+    <span class="tx-main">
+      <span class="tx-title">{{ (r.concept|limpio) or "Pago con tarjeta" }} <span class="badge">pendiente</span></span>
+      <span class="tx-sub">{{ r.date|fecha }} · {{ r.account }} · llegará solo cuando el banco lo contabilice</span>
+    </span>
+    <span class="tx-amount num">{{ r.amount|eur_sign if r.amount > 0 else r.amount|eur }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
 {% if rows %}
   <p class="muted small">{{ rows|length }} movimiento{{ 's' if rows|length != 1 }}. Toca uno para editarlo o borrarlo.</p>
   {% for day, items in rows|groupby('date')|reverse %}
-  <h3 class="day">{{ day|dia_largo }}{% if all_months %} de {{ day[:4] }}{% endif %}</h3>
+  <h3 class="day" id="dia-{{ day }}">{{ day|dia_largo }}{% if all_months %} de {{ day[:4] }}{% endif %}</h3>
   <div class="card list">
     {% for r in items %}{{ tx_row(r) }}{% endfor %}
   </div>

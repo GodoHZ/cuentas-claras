@@ -37,7 +37,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 
-from . import calc, clasificar, config, repo
+from . import avisos, calc, clasificar, config, repo
 
 SOURCE = "banco"
 log = logging.getLogger("finanzas")
@@ -246,6 +246,8 @@ def disconnect(conn, client, link_id: int) -> None:
         except BankError:
             pass                           # si ya había caducado, da igual
     with conn:
+        conn.execute("DELETE FROM bank_pending WHERE account_id IN "
+                     "(SELECT account_id FROM bank_accounts WHERE link_id = ? AND account_id IS NOT NULL)", (link_id,))
         conn.execute("DELETE FROM bank_links WHERE id = ?", (link_id,))
 
 
@@ -318,7 +320,7 @@ def _tx(fila) -> calc.Tx:
 def import_account(conn, client, cuenta, today: date) -> dict:
     """Trae los movimientos de una cuenta del banco. Devuelve cuántos de cada tipo."""
     cuenta_app = cuenta["account_id"]
-    cuenta_info = {"nuevos": 0, "ya_estaban": 0, "por_revisar": 0, "otra_moneda": 0}
+    cuenta_info = {"nuevos": 0, "ya_estaban": 0, "por_revisar": 0, "otra_moneda": 0, "retenidos": 0}
     since = date.fromisoformat(cuenta["since"])
     desde = max(since, today - OVERLAP)
     if not conn.execute("SELECT 1 FROM bank_refs WHERE ref LIKE ? LIMIT 1", (cuenta["ident"] + ":%",)).fetchone():
@@ -331,6 +333,8 @@ def import_account(conn, client, cuenta, today: date) -> dict:
         if not clave:
             break
     apuntadas = [t for t in transacciones if t.get("status", "BOOK") == "BOOK"]
+    cuenta_info["retenidos"] = save_pending(conn, cuenta_app, [t for t in transacciones if t.get("status") == "PDNG"],
+                                            apuntadas, today)
     for tx, ref in zip(apuntadas, _refs(cuenta["ident"], apuntadas)):
         if conn.execute("SELECT 1 FROM bank_refs WHERE ref = ?", (ref,)).fetchone():
             continue
@@ -356,16 +360,79 @@ def import_account(conn, client, cuenta, today: date) -> dict:
             tipo = calc.INGRESO if entra else calc.GASTO
             concepto = _texto(tx) or ("Ingreso" if entra else "Gasto") + " del banco"
             categoria, revisar = clasificar.guess(conn, concepto, tipo)
+            regla = repo.matching_rule(conn, concepto, tipo)          # tus reglas mandan
+            if regla and regla["category_id"]:
+                categoria, revisar = regla["category_id"], False
             if categoria is None:
                 continue                     # sin categorías de ese tipo no se puede apuntar
+            sobre = repo.get_row(conn, "envelopes", regla["envelope_id"]) if regla and regla["envelope_id"] else None
+            pagado_con_sobre = sobre if (sobre and tipo == calc.GASTO
+                                         and sobre["account_id"] in (cuenta_app, None)) else None
             tx_id = repo.insert_tx(conn, date=dia.isoformat(), type=tipo, category_id=categoria,
-                                   envelope_id=None, account_id=cuenta_app, concept=concepto, amount=cents,
+                                   envelope_id=pagado_con_sobre["id"] if pagado_con_sobre else None,
+                                   account_id=cuenta_app, concept=concepto, amount=cents,
                                    source=SOURCE, review=1 if revisar else 0)
+            if sobre and tipo == calc.INGRESO:   # un ingreso que la regla manda apartar en un sobre
+                destino = sobre["account_id"] or cuenta_app
+                repo.insert_tx(conn, date=dia.isoformat(), type=calc.APORTE, category_id=None,
+                               envelope_id=sobre["id"], account_id=destino,
+                               other_account_id=cuenta_app if destino != cuenta_app else None,
+                               concept=f"Apartado por la regla «{regla['pattern']}»", amount=cents, source=SOURCE)
+            if tipo == calc.INGRESO:
+                repo.settle_owed(conn, tx_id, cents, concepto, dia.isoformat())
             conn.execute("INSERT INTO bank_refs (ref, tx_id, account_id) VALUES (?, ?, ?)",
                          (ref, tx_id, cuenta_app))
             cuenta_info["nuevos"] += 1
             cuenta_info["por_revisar"] += 1 if revisar else 0
     return cuenta_info
+
+
+def _signed(tx: dict) -> int | None:
+    cents = _cents(tx.get("transaction_amount"))
+    if not cents:
+        return None
+    return cents if tx.get("credit_debit_indicator") == "CRDT" else -cents
+
+
+def save_pending(conn, account_id: int, retenidas: list[dict], apuntadas: list[dict], today: date) -> int:
+    """Guarda lo que el banco tiene retenido en esa cuenta (sustituye lo de la vez anterior).
+
+    Se salta lo que viene a la vez contabilizado (hay bancos que lo mandan repetido un rato) y lo que
+    no es en euros. Devuelve cuántos quedan retenidos.
+    """
+    ayer = (today - timedelta(days=1)).isoformat()
+    ya = {_signed(t) for t in apuntadas if (t.get("booking_date") or "") >= ayer}
+    filas = []
+    for tx in retenidas:
+        signed = _signed(tx)
+        dia = tx.get("transaction_date") or tx.get("booking_date") or tx.get("value_date") or today.isoformat()
+        if not signed or signed in ya or (tx.get("transaction_amount") or {}).get("currency", "EUR") != "EUR":
+            continue
+        filas.append((account_id, dia, signed, _texto(tx) or "Retenido por el banco"))
+    with conn:
+        conn.execute("DELETE FROM bank_pending WHERE account_id = ?", (account_id,))
+        conn.executemany("INSERT INTO bank_pending (account_id, date, amount, concept) VALUES (?, ?, ?, ?)", filas)
+    return len(filas)
+
+
+def pending(conn) -> list[dict]:
+    """Lo retenido que no has apuntado tú ya a mano (si lo apuntaste, ya cuenta: no se resta dos veces)."""
+    resultado = []
+    for fila in conn.execute("SELECT p.*, a.name AS account, a.spendable FROM bank_pending p "
+                             "JOIN accounts a ON a.id = p.account_id ORDER BY p.date DESC, p.id DESC"):
+        try:
+            dia = date.fromisoformat(fila["date"][:10])
+        except ValueError:
+            continue
+        if _manual_match(conn, fila["account_id"], fila["amount"], dia) is None:
+            resultado.append({**dict(fila), "date": dia})
+    return resultado
+
+
+def held(retenidos: list[dict]) -> int:
+    """Lo que ya ha salido aunque el banco no lo haya contabilizado: los cargos retenidos en cuentas del
+    día a día. Lo que va a entrar no se cuenta hasta que llegue."""
+    return sum(-r["amount"] for r in retenidos if r["amount"] < 0 and r["spendable"])
 
 
 def pair_transfers(conn) -> int:
@@ -416,7 +483,8 @@ def record_balance(conn, client, cuenta, today: date) -> int | None:
 def sync_link(conn, client, link, today: date, now: datetime | None = None) -> dict:
     """Sincroniza una conexión entera. Nunca lanza: el error queda guardado en la conexión."""
     now = now or datetime.now(timezone.utc)
-    total = {"nuevos": 0, "ya_estaban": 0, "por_revisar": 0, "otra_moneda": 0, "traspasos": 0}
+    total = {"nuevos": 0, "ya_estaban": 0, "por_revisar": 0, "otra_moneda": 0, "traspasos": 0, "retenidos": 0}
+    antes = avisos.instantanea(conn, today)
     try:
         if not link["session_id"]:
             raise BankError("Esta conexión no llegó a terminarse: vuelve a darle a «Conectar».")
@@ -436,6 +504,8 @@ def sync_link(conn, client, link, today: date, now: datetime | None = None) -> d
         conn.execute("UPDATE bank_links SET last_sync = ?, last_error = ? WHERE id = ?",
                      (now.strftime("%Y-%m-%dT%H:%M:%SZ"), error, link["id"]))
     total["error"] = error
+    if not error and total["nuevos"]:
+        avisos.tras_sincronizar(conn, antes)
     return total
 
 
@@ -454,6 +524,8 @@ def summary_text(r: dict) -> str:
         partes.append(f"{r['traspasos']} traspaso{'s' if r['traspasos'] != 1 else ''} entre tus cuentas")
     if r["por_revisar"]:
         partes.append(f"{r['por_revisar']} por revisar")
+    if r.get("retenidos"):
+        partes.append(f"{r['retenidos']} retenido{'s' if r['retenidos'] != 1 else ''}")
     if r["otra_moneda"]:
         partes.append(f"{r['otra_moneda']} en otra moneda que no he apuntado")
     return ", ".join(partes)

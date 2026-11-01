@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% from "_iconos.html" import icono %}
+{% block title %}{{ etiqueta.name }} · Finanzas{% endblock %}
+{% block heading %}{{ etiqueta.name }}{% endblock %}
+{% block main %}
+<section class="card hero">
+  <p class="label">{{ icono("etiqueta") }} Te ha costado</p>
+  <p class="hero-num num">{{ (gastado - devuelto)|eur }}</p>
+  <p class="hero-linea">
+    {%- if desde %}{% if desde == hasta %}El {{ desde|fecha }}{% else %}Del {{ desde|fecha }} al {{ hasta|fecha }} ({{ n_dias }} días){% endif %}{% endif %}
+    {%- if devuelto %} · gastaste <b class="num">{{ gastado|eur }}</b> y te devolvieron <b class="num">{{ devuelto|eur }}</b>{% endif %}
+    {%- if n_dias > 1 %} · <b class="num">{{ ((gastado - devuelto) // n_dias)|eur }}</b> al día{% endif %}</p>
+</section>
+
+{% if categorias %}
+<section class="card tendencias">
+  <h2>En qué</h2>
+  {% for c in categorias %}
+  <div class="fila-tend">
+    <span>{{ c.name }}</span>
+    <span class="num"><b>{{ c.spent|eur }}</b></span>
+    <span class="tend-barras" aria-hidden="true"><span style="width: {{ (c.bar * 100)|round(1) }}%"></span></span>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+<h2 class="section-title">Movimientos</h2>
+<div class="card list">
+  {% for r in rows %}
+  <div class="etiqueta-fila">
+    <a class="tx tx-{{ r.type }}" href="/movimientos/{{ r.id }}">
+      <span class="tx-dot" aria-hidden="true"></span>
+      <span class="tx-main">
+        <span class="tx-title">{{ (r.concept|limpio) or r.category or r.envelope }}</span>
+        <span class="tx-sub">{{ r.date|fecha }} · {{ r.category or TYPES[r.type] }}</span>
+      </span>
+      <span class="tx-amount num">{% if r.type == 'ingreso' %}{{ r.amount|eur_sign }}{% elif r.type == 'gasto' %}{{ (0 - r.amount)|eur }}{% else %}{{ r.amount|eur }}{% endif %}</span>
+    </a>
+    <form method="post" action="/etiquetas/{{ etiqueta.id }}/quitar/{{ r.id }}">
+      <button class="link danger small" type="submit" aria-label="Quitar de la etiqueta">Quitar</button></form>
+  </div>
+  {% endfor %}
+</div>
+
+<details class="card nuevo-fijo">
+  <summary>{{ icono("nuevo") }} Añadir los gastos de unas fechas</summary>
+  <form method="post" action="/etiquetas/{{ etiqueta.id }}/rango" class="stack">
+    <div class="field-row">
+      <div class="stack"><label class="legend" for="et-desde">Desde</label><input id="et-desde" name="desde" type="date" required value="{{ desde or '' }}"></div>
+      <div class="stack"><label class="legend" for="et-hasta">Hasta</label><input id="et-hasta" name="hasta" type="date" value="{{ hasta or '' }}"></div>
+    </div>
+    <button class="btn" type="submit">Añadir</button>
+  </form>
+</details>
+<details class="card nuevo-fijo">
+  <summary>{{ icono("editar") }} Cambiar el nombre o borrar</summary>
+  <form method="post" action="/etiquetas/{{ etiqueta.id }}/nombre" class="stack">
+    <label class="legend" for="et-nombre">Nombre</label>
+    <input id="et-nombre" name="nombre" maxlength="40" value="{{ etiqueta.name }}" required>
+    <button class="btn" type="submit">Guardar</button>
+  </form>
+  <form method="post" action="/etiquetas/{{ etiqueta.id }}/borrar" hx-confirm="¿Borrar la etiqueta «{{ etiqueta.name }}»? Los movimientos no se borran.">
+    <button class="link danger" type="submit">Borrar la etiqueta</button></form>
+</details>
+{% endblock %}

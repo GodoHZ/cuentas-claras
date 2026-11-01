@@ -14,7 +14,7 @@
 <a class="card cuenta-card" href="/cuentas/{{ c.account.id }}">
   <div class="env-top">
     <span class="env-name">{{ c.account.name }}
-      {%- if not c.account.spendable %} <span class="badge">no suma</span>{% endif %}</span>
+      {%- if not c.account.spendable %} <span class="badge">aparte</span>{% endif %}</span>
     <span class="env-balance num">{{ c.balance|eur }}</span>
   </div>
   {% if c.in_envelopes %}
@@ -31,7 +31,8 @@
   {% endif %}
   {% if c.check %}
   <p class="hint level-{{ c.check.r.level }}">{{ icono_nivel(c.check.r.level) }} {{ c.check.r.message }}
-    <span class="muted">· comprobado el {{ c.check.check.date|fecha }}</span></p>
+    <span class="muted">· el banco decía <b class="num">{{ c.check.check.balance|eur }}</b>
+      {{ c.check.check.created_at|cuando or ("el " ~ (c.check.check.date|fecha)) }}</span></p>
   {% endif %}
 </a>
 {% else %}
@@ -49,7 +50,15 @@
 {% endfor %}
 {% endif %}
 
-<p class="muted small">Las marcadas «no suma» no entran en el «puedes gastar» del panel: su dinero es tuyo,
-  pero no es para el día a día. Para crear cuentas, renombrarlas, cambiar su saldo inicial o esa marca:
-  <a href="/ajustes?abierto=cuentas#cuentas">Ajustes › Cuentas</a>.</p>
+<a class="card fila-enlace" href="/me-deben">
+  <span><strong>Me deben</strong><small class="muted">Lo que pagaste por otros y te tienen que devolver</small></span>
+  <span aria-hidden="true">›</span>
+</a>
+{% if usa.bancos %}<a class="card fila-enlace" href="/banco">
+  <span><strong>Bancos</strong><small class="muted">Traer solos los movimientos y comprobar los saldos</small></span>
+  <span aria-hidden="true">›</span>
+</a>{% endif %}
+
+<p class="muted small center">Las cuentas «aparte» no cuentan en «Puedes gastar»: su dinero es tuyo, pero no es para
+  el día a día. Crear, renombrar o cambiar el saldo inicial: <a href="/ajustes?abierto=cuentas#cuentas">Ajustes › Cuentas</a>.</p>
 {% endblock %}

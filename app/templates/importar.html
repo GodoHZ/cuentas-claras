@@ -13,7 +13,7 @@
     («1.234,56 €», fechas 19/09/2026). Se saltan las filas sin importe y las que ponen «(ejemplo)»,
     y lo que ya esté apuntado no se duplica. Antes de guardar nada verás una vista previa.</p>
   <form method="post" action="/ajustes/importar" enctype="multipart/form-data" hx-boost="false" class="stack">
-    <input type="file" name="archivo" accept=".csv,text/csv,text/plain" required>
+    <input type="file" name="archivo" aria-label="Archivo CSV del banco" accept=".csv,text/csv,text/plain" required>
     <button class="btn btn-primary" type="submit">Ver vista previa</button>
   </form>
 </div>

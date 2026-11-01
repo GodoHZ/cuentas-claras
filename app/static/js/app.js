@@ -9,13 +9,28 @@
 
   function quickForm() { return $('#txform-qa'); }
 
+  const MOVER = ['traspaso', 'aporte_sobre', 'retiro_sobre'];
+
+  // Tres tipos a la vista (gasto, ingreso, mover); «mover» se concreta en traspaso, aporte o retiro.
   function applyType(form, type) {
-    const radio = form.querySelector('input[name="tipo"][value="' + type + '"]');
-    if (radio) { radio.checked = true; onTypeChange(form); }
+    const tipo = MOVER.includes(type) ? 'mover' : type;
+    const radio = form.querySelector('input[name="tipo"][value="' + tipo + '"]');
+    if (radio) radio.checked = true;
+    if (tipo === 'mover') {
+      const sub = form.querySelector('input[name="mover"][value="' + type + '"]');
+      if (sub) sub.checked = true;
+    }
+    onTypeChange(form);
+  }
+
+  function tipoEfectivo(form) {
+    const tipo = (form.querySelector('input[name="tipo"]:checked') || {}).value || 'gasto';
+    if (tipo !== 'mover') return tipo;
+    return (form.querySelector('input[name="mover"]:checked') || {}).value || 'traspaso';
   }
 
   function onTypeChange(form) {
-    const type = (form.querySelector('input[name="tipo"]:checked') || {}).value || 'gasto';
+    const type = tipoEfectivo(form);
     // deseleccionar lo que ya no se ve, para no mandar una categoría de otro tipo
     form.querySelectorAll('input[name="categoria_id"]:checked').forEach((input) => {
       const group = input.closest('[data-show]');
@@ -68,6 +83,11 @@
       const concept = form.querySelector('input[name="concepto"]');
       if (concept) concept.value = options.concepto;
     }
+    // el mes al que cuenta: el que te pidan (lo previsto del mes que viene) o el de siempre
+    const mes = form.querySelector('input[name="cuenta_mes"][value="' + ((options && options.mes) || '') + '"]');
+    if (mes) mes.checked = true;
+    const otroMes = form.querySelector('details.otro-mes');
+    if (otroMes) otroMes.open = Boolean(options && options.mes);
     const uid = form.querySelector('input[name="uid"]');
     if (uid) uid.value = nuevoUid();
     if (!dialog.open) dialog.showModal();
@@ -118,7 +138,7 @@
   document.addEventListener('change', (event) => {
     const form = event.target.form;
     if (!form || !form.classList.contains('txform')) return;
-    if (event.target.name === 'tipo') onTypeChange(form);
+    if (event.target.name === 'tipo' || event.target.name === 'mover') onTypeChange(form);
     if (event.target.name === 'sobre_id') cuentaDelSobre(form);
     if (event.target.name === 'cuenta_id') form.dataset.cuentaTocada = '1';
   });
@@ -135,6 +155,8 @@
     toastTimer = setTimeout(() => box.classList.remove('on'), 3200);
   }
 
+  document.body.addEventListener('txConfirmado', (event) => toast(event.detail.value || 'Confirmado'));
+
   document.body.addEventListener('txGuardado', (event) => {
     const dialog = $('#qa');
     if (dialog && dialog.open) dialog.close();
@@ -145,15 +167,93 @@
     }
   });
 
+  // ------------------------------------------------ repartir la nómina: lo que queda, en vivo
+
+  // '1.234,56' -> 123456 céntimos (como money.parse_amount, en lo básico). Vacío o raro -> 0.
+  function centimos(texto) {
+    let s = String(texto || '').replace(/[€\s\u00a0]/g, '');
+    if (!s) return 0;
+    if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+    else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
+    const n = Number(s);
+    return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : 0;
+  }
+
+  function euros(c) {
+    const signo = c < 0 ? '−' : '';
+    const abs = Math.abs(c);
+    const entero = Math.floor(abs / 100).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return signo + entero + ',' + String(abs % 100).padStart(2, '0') + '\u00a0€';
+  }
+
+  function recalcularReparto(form) {
+    const base = Number(form.dataset.base) || 0;
+    let apartado = 0;
+    form.querySelectorAll('input[name^="sobre_"]').forEach((i) => { apartado += centimos(i.value); });
+    const queda = base - apartado;
+    const q = form.querySelector('[data-queda]');
+    if (q) { q.textContent = euros(queda); q.classList.toggle('neg', queda < 0); }
+    const dias = Number(form.dataset.dias);
+    const alDia = form.querySelector('[data-al-dia]');
+    if (alDia) {
+      alDia.textContent = queda < 0 ? 'Apartas más de lo que tienes libre.'
+        : dias ? euros(Math.floor(queda / dias)) + ' al día durante ' + dias + ' días' : '';
+    }
+    const frente = form.querySelector('[data-frente]');
+    if (frente && form.dataset.presupuesto !== '') {
+      const pres = Number(form.dataset.presupuesto);
+      const dif = queda - pres;
+      frente.textContent = 'Tus presupuestos del día a día suman ' + euros(pres) + ': ' +
+        (dif >= 0 ? 'te sobran ' + euros(dif) + '.' : 'te faltan ' + euros(-dif) + '.');
+    }
+  }
+
+  document.addEventListener('input', (e) => {
+    const t = e.target;
+    const form = t && t.closest && t.closest('form[data-reparto]');
+    if (form) recalcularReparto(form);
+  });
+
+  function prepararReparto() { document.querySelectorAll('form[data-reparto]').forEach(recalcularReparto); }
+  document.addEventListener('DOMContentLoaded', prepararReparto);
+  document.body.addEventListener('htmx:afterSettle', prepararReparto);
+
+  // ------------------------------------------------ dividir un gasto: cuánto te debe cada uno, en vivo
+
+  function recalcularDivision(form) {
+    const varios = form.querySelector('input[name="dividir"]').checked;
+    form.querySelectorAll('[data-solo]').forEach((el) => {
+      el.hidden = el.dataset.solo !== (varios ? 'varios' : 'uno');
+    });
+    const persona = form.querySelector('input[name="persona"]');
+    persona.placeholder = varios ? persona.dataset.placeholderVarios : 'Ej.: Pol';
+    const cuota = form.querySelector('[data-cuota]');
+    if (!varios || !cuota) return;
+    const gente = persona.value.split(',').map((p) => p.trim()).filter(Boolean).length;
+    const partes = gente + (form.querySelector('input[name="yo_tambien"]').checked ? 1 : 0);
+    const total = centimos(form.querySelector('input[name="importe"]').value);
+    cuota.textContent = gente && total && partes
+      ? (gente === 1 ? 'Te debe ' : 'Cada uno te debe ') + euros(Math.floor(total / partes)) +
+        (gente > 1 ? ' (' + euros(Math.floor(total / partes) * gente) + ' entre los ' + gente + ')' : '')
+      : 'Escribe los nombres separados por comas y el total.';
+  }
+
+  ['input', 'change'].forEach((tipo) => document.addEventListener(tipo, (e) => {
+    const form = e.target && e.target.closest && e.target.closest('form[data-dividir]');
+    if (form) recalcularDivision(form);
+  }));
+
+  function prepararDivision() { document.querySelectorAll('form[data-dividir]').forEach(recalcularDivision); }
+  document.addEventListener('DOMContentLoaded', prepararDivision);
+  document.body.addEventListener('htmx:afterSettle', prepararDivision);
+
   // ------------------------------------------------ gráfico (solo donde hace falta)
 
   function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
 
   function drawCharts() {
-    const canvas = document.querySelector('canvas[data-chart]');
-    if (!canvas || canvas.dataset.drawn) return;
-    const source = document.getElementById(canvas.id + '-data');
-    if (!source) return;
+    const pendientes = [...document.querySelectorAll('canvas[data-chart]')].filter((c) => !c.dataset.drawn);
+    if (!pendientes.length) return;
     if (!window.Chart) {
       if (!document.getElementById('chartjs')) {
         const tag = document.createElement('script');
@@ -164,11 +264,48 @@
       }
       return;
     }
+    pendientes.forEach(drawChart);
+  }
+
+  function drawChart(canvas) {
+    const source = document.getElementById(canvas.id + '-data');
+    if (!source) return;
     const data = JSON.parse(source.textContent);
     const ink = cssVar('--ink-2') || '#52514e';
     const grid = cssVar('--line') || '#e1e0d9';
     const surface = cssVar('--surface') || '#fff';
     canvas.dataset.drawn = '1';
+    const dinero = (value) => value.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+    if (data.type === 'line') {
+      new Chart(canvas, {
+        type: 'line',
+        data: {
+          labels: data.labels,
+          datasets: data.series.map((s, i) => ({
+            label: s.name, data: s.data,
+            borderColor: cssVar('--s' + s.slot), backgroundColor: cssVar('--s' + s.slot),
+            borderWidth: i === 0 ? 2.5 : 1.5, borderDash: i === 0 ? [] : [4, 3],
+            pointRadius: data.points ? 3 : 0, pointHoverRadius: 4, tension: 0.25,
+          })),
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: (item) => item.dataset.label + ': ' + dinero(item.parsed.y) } },
+          },
+          scales: {
+            x: { grid: { display: false }, border: { color: grid },
+                 ticks: { color: ink, font: { size: 11 }, maxTicksLimit: 6, maxRotation: 0 } },
+            y: { border: { display: false }, grid: { color: grid, drawTicks: false },
+                 ticks: { color: ink, font: { size: 11 }, maxTicksLimit: 5,
+                          callback: (value) => value.toLocaleString('es-ES') + ' €' } },
+          },
+        },
+      });
+      return;
+    }
     new Chart(canvas, {
       type: 'bar',
       data: {
@@ -194,8 +331,7 @@
           legend: { display: false },
           tooltip: {
             callbacks: {
-              label: (item) => item.dataset.label + ': ' +
-                item.parsed.y.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' }),
+              label: (item) => item.dataset.label + ': ' + dinero(item.parsed.y),
             },
           },
         },

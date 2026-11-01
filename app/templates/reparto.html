@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% from "_iconos.html" import icono %}
+{% block title %}Repartir la nómina · Finanzas{% endblock %}
+{% block heading %}Repartir la nómina{% endblock %}
+{% block main %}
+{% if not p.payday %}
+<div class="empty">
+  <p>Aún no has cobrado ninguna nómina.</p>
+  <p class="muted">Cuando llegue (la trae el banco o la apuntas tú con la categoría de la nómina), aquí podrás decidir
+    cuánto va a cada sobre y cuánto queda para el día a día.</p>
+</div>
+{% else %}
+<section class="card hero">
+  <p class="label">Cobraste el {{ p.payday.strftime('%d/%m') }}</p>
+  <p class="hero-num num">{{ p.income|eur }}</p>
+  <p class="hero-linea">Ahora tienes <b class="num">{{ p.available|eur }}</b> sin apartar en sobres
+    {%- if p.held %} · retenido <b class="num">−{{ p.held|eur }}</b>{% endif %}
+    {%- if p.fixed_pending %} · pagos fijos por venir <b class="num">−{{ p.fixed_pending|eur }}</b>{% endif %}.</p>
+  {% if p.done %}<p class="hint">{{ icono("check") }} Este cobro ya lo repartiste. Puedes apartar más si quieres.</p>{% endif %}
+</section>
+
+{% if p.fixed %}
+<section class="card">
+  <div class="row-between"><h2>Ya tiene dueño</h2><span class="num strong">{{ p.fixed_pending|eur }}</span></div>
+  <ul class="plain">
+    {% for u in p.fixed %}
+    <li class="previsto-linea {{ 'hecho' if u.paid }}">
+      <span class="previsto-que">{{ icono("deudas") }} {{ u.name }}
+        <small class="muted">{% if u.paid %}ya apuntado{% elif u.due %}el {{ u.due.strftime('%d/%m') }}{% endif %}</small></span>
+      <span class="num previsto-num">{% if u.paid %}{{ icono("check") }}{% else %}{{ u.pending|eur }}{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  <p class="hint">Tus pagos fijos de este mes. Los que faltan ya no cuentan como dinero tuyo.</p>
+</section>
+{% endif %}
+
+<form method="post" action="/reparto" class="card reparto" data-reparto data-base="{{ p.base }}"
+      data-dias="{{ p.days or '' }}" data-presupuesto="{{ p.budget_left if p.budget_left is not none else '' }}">
+  <h2>¿Cuánto guardas en cada sobre?</h2>
+  {% if p.envelopes %}
+  <p class="hint">Viene puesto lo que guardas cada mes. Cámbialo a tu gusto: lo que no metas en sobres es para el día
+    a día. Si un sobre está en otra cuenta, luego te recuerdo hacer la transferencia.</p>
+  {% for s in p.envelopes %}
+  <div class="budget-edit">
+    <label for="rep-{{ s.env.id }}">{{ s.env.name }}
+      <small class="muted">{% if s.account %}en {{ s.account }}{% endif %}{% if s.monthly %} · sueles guardar {{ s.monthly|eur }}{% endif %}
+        {%- if s.st.needed and not s.st.on_track %} · para llegar a tiempo, {{ s.st.needed|eur }}/mes{% endif %}</small></label>
+    <div class="budget-edit-input">
+      <input id="rep-{{ s.env.id }}" name="sobre_{{ s.env.id }}" inputmode="decimal" autocomplete="off"
+             value="{{ s.suggested|importe_input if s.suggested }}" placeholder="0">
+      <span class="suffix">€</span>
+    </div>
+  </div>
+  {% endfor %}
+  {% else %}
+  <p class="hint">No tienes sobres activos. Si quieres apartar dinero para algo, <a href="/sobres">crea uno</a>.</p>
+  {% endif %}
+
+  <div class="reparto-total" aria-live="polite">
+    <p class="label">Para el día a día</p>
+    <p class="stat-num num" data-queda>{{ (p.base - p.suggested_total)|eur }}</p>
+    <p class="hint" data-al-dia>{% if p.days and p.base - p.suggested_total > 0 %}{{ ((p.base - p.suggested_total) // p.days)|eur }} al día durante {{ p.days }} días{% endif %}</p>
+    {% if p.budget_left is not none %}
+    <p class="hint" data-frente>Tus presupuestos del día a día suman {{ p.budget_left|eur }} para lo que queda de mes.</p>
+    {% endif %}
+  </div>
+  <button class="btn btn-primary btn-block" type="submit">{{ "Apartar y listo" if p.envelopes else "Listo" }}</button>
+</form>
+{% if not p.done %}
+<form method="post" action="/reparto/omitir" class="center">
+  <button class="link" type="submit">Ahora no: no me lo recuerdes hasta el próximo cobro</button></form>
+{% endif %}
+{% endif %}
+{% endblock %}

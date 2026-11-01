@@ -1,8 +1,20 @@
 """Las sobras del mes se guardan solas en el colchón."""
 from datetime import date
 
-from app import calc, main, repo, views
-from conftest import ids
+import pytest
+
+from app import calc, db, main, repo, views
+from conftest import apuntar, ids
+
+
+@pytest.fixture(autouse=True)
+def sobras_por_meses(db_path):
+    """Estos tests son de la otra manera de contar lo que sobra: lo cobrado en el mes menos lo gastado."""
+    conn = db.connect(db_path)
+    with conn:
+        repo.set_setting(conn, "sweep_mode", "mes")
+        repo.set_setting(conn, "month_start", "dia1")
+    conn.close()
 
 
 def mes_con_sobras(conn, ingreso=150000, gasto=20000, aporte=10000):

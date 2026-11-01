@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import envelope_card, month_nav %}
+{% from "_macros.html" import month_nav with context %}
 {% from "_iconos.html" import icono, icono_nivel %}
 {% block heading %}{{ "Este mes" if is_current else month_name(year, month, True) }}{% endblock %}
 {% block main_class %}dos-columnas{% endblock %}
@@ -9,199 +9,246 @@
 <div class="col col-a">
 
 {% if forecast %}
-{# el mes en curso se cuenta desde el dinero que hay en las cuentas, no desde la nómina #}
+{# El mes en curso se cuenta desde el dinero que hay en las cuentas, no desde la nómina #}
 <section class="card hero {{ 'neg' if forecast.left < 0 }}">
   <p class="label">Puedes gastar</p>
   <p class="hero-num num">{{ forecast.left|eur }}</p>
-  <dl class="hero-extra">
-    <dt>Tienes, sin contar los sobres</dt>
-    <dd class="num">{{ forecast.available|eur }}</dd>
-    <dt>Por pagar y guardar este mes</dt>
-    <dd class="num">{% if forecast.pending_total %}−{% endif %}{{ forecast.pending_total|eur }}</dd>
-  </dl>
-  <p class="cuentas-linea">
-    {%- for c in cuentas if c.free and c.account.spendable %}
-    <span>{{ c.account.name }} <b class="num">{{ c.free|eur }}</b></span>
-    {%- endfor %}
-  </p>
-  <p class="hint">Tu dinero menos lo que ya tiene dueño: el saldo de tus <a href="/cuentas">cuentas</a>, sin lo
-    que tengas apartado en sobres, y sin lo que te falta por pagar y por guardar este mes. De aquí sale el día a
-    día: compra, gasolina, caprichos.
-    {% if fuera_de_la_suma %}No suma {{ fuera_de_la_suma|join(', ') }}, que la dejaste fuera en
-      <a href="/ajustes?abierto=cuentas#cuentas">Ajustes › Cuentas</a>.{% endif %}
-    {% if forecast.left < 0 %}<strong>Está en negativo: no llega para todo lo que tienes comprometido.</strong>{% endif %}</p>
-  <p class="formula">En cuentas − sobres − previsto = puedes gastar</p>
+  {% if cobro and forecast.left > 0 %}
+  <p class="al-dia"><b class="num">{{ cobro.per_day|eur }}</b> al día hasta el próximo cobro
+    <span class="muted">({{ cobro.days }} día{{ 's' if cobro.days != 1 }}, ~{{ cobro.date.strftime('%d/%m') }})</span></p>
+  {% endif %}
+  {% if ritmo %}
+  <p class="ritmo {{ 'neg' if ritmo.end < 0 }}">A este ritmo ({{ ritmo.per_day|eur }} al día) llegas al cobro
+    {% if ritmo.end >= 0 %}con <b class="num">{{ ritmo.end|eur }}</b>{% else %}<b>faltándote {{ (0 - ritmo.end)|eur }}</b>{% endif %}</p>
+  {% endif %}
+  {% set este_mes = forecast.pending_total - forecast.pending_next %}
+  <p class="hero-linea">Tienes <b class="num">{{ forecast.available|eur }}</b>
+    {%- if forecast.held %} · retenido <b class="num">−{{ forecast.held|eur }}</b>{% endif %}
+    {%- if este_mes %} · por pagar y guardar <b class="num">−{{ este_mes|eur }}</b>{% endif %}
+    {%- if forecast.pending_next %} · del mes que viene <b class="num">−{{ forecast.pending_next|eur }}</b>{% endif %}</p>
+  {% if forecast.left < 0 %}<p class="hint"><strong>No llega para todo lo que tienes comprometido.</strong></p>{% endif %}
+  <details class="como">
+    <summary>¿Cómo se calcula?</summary>
+    <p class="hint">El saldo de tus <a href="/cuentas">cuentas</a> del día a día, sin lo que tienes apartado en sobres
+      y sin lo que te falta por pagar y por guardar hasta el próximo cobro. De aquí sale el día a día: compra,
+      gasolina, caprichos.{% if fuera_de_la_suma %} No cuenta {{ fuera_de_la_suma|join(', ') }}, que está «aparte».{% endif %}</p>
+    <p class="formula">En cuentas − sobres{{ " − retenido" if forecast.held }} − previsto = puedes gastar</p>
+  </details>
 </section>
 {% else %}
 <section class="card hero {{ 'neg' if m.free < 0 }}">
-  <p class="label">Libre de ese mes</p>
+  <p class="label">Te quedó de ese mes</p>
   <p class="hero-num num">{{ m.free|eur }}</p>
-  <p class="hint">Lo que te quedó de lo cobrado ese mes después de los gastos y de lo guardado en sobres.
-    {% if m.free < 0 %}<strong>Está en negativo: gastaste o guardaste más de lo que cobraste.</strong>{% endif %}</p>
-  <p class="formula">Ingresos − gastos − aportado = libre</p>
+  <details class="como">
+    <summary>¿Cómo se calcula?</summary>
+    <p class="hint">Lo cobrado ese mes menos los gastos y lo que guardaste en sobres.
+      {% if m.free < 0 %}En negativo: gastaste o guardaste más de lo que cobraste.{% endif %}</p>
+  </details>
 </section>
 {% endif %}
 
-{% if banco_al_abrir %}
+{% if banco_estado and usa.bancos %}
+<form class="banco-estado muted small" method="post" action="/banco/actualizar">
+  <a href="/banco">Banco actualizado {{ banco_estado.hace }}
+    {%- if banco_estado.errores %} · <strong class="neg">falló {{ banco_estado.errores|join(", ") }}</strong>{% endif %}</a>
+  · <button class="link" type="submit">Actualizar</button>
+</form>
+{% endif %}
+{% if banco_al_abrir and usa.bancos %}
 <div id="banco-al-abrir" hx-post="/banco/al-abrir" hx-trigger="load delay:400ms" hx-swap="outerHTML"
      class="banco-mirando muted small">Mirando si hay movimientos nuevos en el banco…</div>
 {% endif %}
-{% for b in banco_caduca %}
-<a class="card aviso-revisar" href="/banco">
-  {{ icono("aviso") }}
-  <span><strong>{% if b.expired %}La conexión con {{ b.name }} ha caducado{% else %}La conexión con {{ b.name }} caduca el {{ b.until.strftime('%d/%m') }}{% endif %}</strong>
-    <span class="muted">El banco pide volver a dar permiso cada pocos meses. Toca aquí para renovarlo.</span></span>
-</a>
-{% endfor %}
-{% if por_revisar %}
-<a class="card aviso-revisar" href="/movimientos?mes=todos&revisar=1">
-  {{ icono("aviso") }}
-  <span><strong>{{ por_revisar }} gasto{{ 's' if por_revisar != 1 }} por revisar</strong>
-    <span class="muted">La app los apuntó sola en sitios nuevos: confirma la categoría.</span></span>
-</a>
+
+{# «Para ti»: lo que pide que hagas algo, y nada más #}
+{% set alertas = budget.alerts if usa.presupuesto else [] %}
+{% set hay = te_deben or banco_caduca or por_revisar or para_ti or (sweep and sweep.amount > 0 and not sweep.due)
+             or cierre or alertas or reparto or cambios or (ritmo_mes and ritmo_mes.warn) or tu_ano %}
+{% if hay %}
+<section class="card para-ti" aria-labelledby="para-ti-titulo">
+  <h2 id="para-ti-titulo">Para ti</h2>
+  <ul class="plain">
+    {% if reparto %}
+    <li><a class="aviso destacado" href="/reparto">{{ icono("nomina") }}
+      <span><strong>Ha llegado la nómina: repártela</strong>
+        <small>Decide cuánto va a cada sobre y cuánto queda para el día a día</small></span><span class="ir">›</span></a></li>
+    {% endif %}
+    {% if ritmo_mes and ritmo_mes.warn %}
+    <li><a class="aviso level-aviso" href="/resumen?mes={{ month_key(year, month) }}#en-que">{{ icono_nivel("aviso") }}
+      <span><strong>Vas {{ ritmo_mes.diff|eur }} por encima de otros meses</strong>
+        <small>A día {{ ritmo_mes.day }} llevas {{ ritmo_mes.spent|eur }} en el día a día; otros meses, {{ ritmo_mes.average|eur }}. Mira en qué</small></span><span class="ir">›</span></a></li>
+    {% endif %}
+    {% for c in cambios %}
+    <li class="aviso">{{ icono("aviso") if c.kind == "doble" else icono("sube") }}
+      <span><strong>{% if c.kind == "doble" %}¿Te han cobrado dos veces {{ c.name }}?{% else %}{{ c.name }} ha subido {{ c.diff|eur }}{% endif %}</strong>
+        <small>{% if c.kind == "doble" %}Dos cargos de {{ c.now|eur }} en pocos días; normalmente es uno al mes. Si no es normal, reclámalo
+          {%- else %}Ahora {{ c.now|eur }} (antes {{ c.before|eur }}){% if c.diff * 12 >= 1000 %}: {{ (c.diff * 12)|eur }} más al año{% endif %}{% endif %} · {{ c.date|fecha }}</small></span>
+      <form method="post" action="/avisos/cambio/visto"><input type="hidden" name="id" value="{{ c.id }}">
+        <button class="btn btn-small" type="submit">Vale</button></form></li>
+    {% endfor %}
+    {% if tu_ano %}
+    <li><a class="aviso" href="/resumen/anual?ano={{ tu_ano }}">{{ icono("estrella") }}
+      <span><strong>Tu {{ tu_ano }} en números</strong>
+        <small>Lo que cobraste, gastaste y guardaste, tu mejor mes y en qué se fue más</small></span><span class="ir">›</span></a></li>
+    {% endif %}
+    {% for b in banco_caduca %}
+    <li><a class="aviso" href="/banco">{{ icono("aviso") }}
+      <span><strong>{% if b.expired %}La conexión con {{ b.name }} ha caducado{% else %}La conexión con {{ b.name }} caduca el {{ b.until.strftime('%d/%m') }}{% endif %}</strong>
+        <small>El banco pide renovar el permiso cada pocos meses</small></span><span class="ir">›</span></a></li>
+    {% endfor %}
+    {% if te_deben %}
+    <li><a class="aviso" href="/me-deben">{{ icono("copia") }}
+      <span><strong>Te deben {{ te_deben|eur }}</strong>
+        <small>Cuando te lo devuelvan, la app lo dará por cobrado sola</small></span><span class="ir">›</span></a></li>
+    {% endif %}
+    {% if por_revisar %}
+    <li><a class="aviso" href="/movimientos#revisar">{{ icono("aviso") }}
+      <span><strong>{{ por_revisar }} movimiento{{ 's' if por_revisar != 1 }} por revisar</strong>
+        <small>Los trajo el banco: confirma su categoría</small></span><span class="ir">›</span></a></li>
+    {% endif %}
+    {% for c in para_ti %}
+    {% if c.kind == "transferir" %}
+    <li><a class="aviso" href="/nuevo" hx-boost="false"
+           data-qa='{{ {"tipo": "traspaso", "cuenta": c.account.id, "importe": c.amount|importe_input}|tojson }}'>{{ icono("copia") }}
+      <span><strong>Pasa {{ c.amount|eur }} a {{ c.account.name }}</strong>
+        <small>Lo apartado en sus sobres es más de lo que hay en ella. Cuando hagas la transferencia, apúntala aquí</small></span><span class="ir">›</span></a></li>
+    {% elif c.kind == "pago" %}
+    {% set u = c.line %}
+    {% set qa = {"tipo": "gasto", "categoria": u.category_id, "concepto": u.name, "importe": u.pending|importe_input} %}
+    {% if u.next_month %}{% set qa = dict(qa, mes="+1") %}{% endif %}
+    <li><a class="aviso" href="/nuevo" hx-boost="false" data-qa='{{ qa|tojson }}'>{{ icono("deudas") }}
+      <span><strong>{{ u.name }} · {{ u.pending|eur }}</strong>
+        <small>{% if c.late %}Se cargaba el {{ u.due.strftime('%d/%m') }} y no está apuntado{% else %}Se carga el {{ u.due.strftime('%d/%m') }}{% endif %}</small></span><span class="ir">Apuntar</span></a></li>
+    {% endif %}
+    {% endfor %}
+    {% if sweep and sweep.amount > 0 and not sweep.due %}
+    <li class="aviso">{{ icono("sobre") }}
+      <span><strong>{% if sweep.mode == "cobro" %}Antes de cobrar te quedaban {{ sweep.amount|eur }}{% else %}Te sobraron {{ sweep.amount|eur }} en {{ month_name(sweep.year, sweep.month) }}{% endif %}</strong>
+        <small>{% if sweep.enabled %}Se guardan solos en «{{ sweep.envelope.name }}»{% else %}Guárdalos en «{{ sweep.envelope.name }}»{% endif %}</small></span>
+      <form method="post" action="/sobras"><button class="btn btn-small btn-primary" type="submit">Guardar ya</button></form></li>
+    {% endif %}
+    {% if cierre %}
+    <li class="aviso {{ 'neg' if cierre.amount < 0 }}">{{ icono("check") if cierre.amount >= 0 else icono("aviso") }}
+      <span><strong>Antes de cobrar el {{ cierre.payday.strftime('%d/%m') }} te quedaban {{ cierre.amount|eur }}</strong>
+        <small>{% if cierre.saved %}Guardados en «{{ cierre.envelope }}»{% elif cierre.amount < 0 %}Llegaste justo, tirando de algo más{% else %}Llegaste justo{% endif %}</small></span></li>
+    {% endif %}
+    {% for a in alertas %}
+    <li><a class="aviso level-{{ a.line.level }}" href="/presupuesto?mes={{ month_key(year, month) }}">{{ icono_nivel(a.line.level) }}
+      <span><strong>{{ a.cat.name }}: {{ a.line.spent|eur }} de {{ a.line.budget|eur }}</strong>
+        <small>{{ "Te has pasado" if a.line.level == "pasado" else "Cerca del límite" }} · {{ a.line.ratio|pct }}</small></span><span class="ir">›</span></a></li>
+    {% endfor %}
+  </ul>
+</section>
 {% endif %}
 
-<section class="stats">
-  <div class="card stat">
-    <p class="label">Ingresos</p>
-    <p class="stat-num num">{{ m.income|eur }}</p>
-    <p class="hint">Lo que has cobrado este mes.</p>
+{% if retenidos %}
+<section class="card retenidos" aria-labelledby="retenidos-titulo">
+  <div class="row-between">
+    <h2 id="retenidos-titulo">Retenido en el banco</h2>
+    {% if forecast.held %}<span class="num strong">−{{ forecast.held|eur }}</span>{% endif %}
   </div>
-  <div class="card stat">
-    <p class="label">Gastos</p>
-    <p class="stat-num num">{{ m.payroll_spent|eur }}</p>
-    <p class="hint">Lo gastado de la nómina. No cuenta lo pagado desde un sobre.</p>
-  </div>
-  <div class="card stat">
-    <p class="label">Aportado a sobres</p>
-    <p class="stat-num num">{{ m.saved|eur }}</p>
-    <p class="hint">{% if m.saved_ratio is not none %}Has guardado el {{ m.saved_ratio|pct }} de lo que has cobrado.{% else %}Lo que has guardado este mes.{% endif %}</p>
-  </div>
-  <div class="card stat">
-    <p class="label">Pagado desde sobres</p>
-    <p class="stat-num num">{{ m.envelope_spent|eur }}</p>
-    <p class="hint">Solo informativo: no resta del libre porque ese dinero ya estaba guardado.</p>
-  </div>
-  {% if forecast %}
-  <div class="card stat">
-    <p class="label">Libre de este mes</p>
-    <p class="stat-num num {{ 'neg' if m.free < 0 }}">{{ m.free|eur }}</p>
-    <p class="hint">Ingresos − gastos − aportado: cómo ha ido el mes. No es el dinero que tienes
-      (eso es lo de arriba), porque no cuenta lo que traías de antes.</p>
-  </div>
-  {% endif %}
+  <ul class="plain">
+    {% for r in retenidos %}
+    <li class="previsto-linea retenido">
+      <span class="previsto-que">{{ icono("reloj") }} {{ (r.concept|limpio) or "Pago con tarjeta" }}
+        <small class="muted">{{ r.account }} · {{ r.date|fecha }} · pendiente</small></span>
+      <span class="num previsto-num">{{ r.amount|eur_sign if r.amount > 0 else r.amount|eur }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  <details class="como">
+    <summary>¿Qué es esto?</summary>
+    <p class="hint">Pagos que el banco ya ha aceptado pero aún no ha contabilizado (suele tardar de unas horas a un par
+      de días). Ya están restados de «Puedes gastar». Cuando el banco los contabilice llegarán como un movimiento
+      normal y desaparecerán de aquí: no tienes que hacer nada. Lo que tiene que entrar no se suma hasta que llegue.</p>
+  </details>
 </section>
+{% endif %}
 
-{% if forecast and forecast.lines %}
+{% if forecast and forecast.pending %}
 <section class="card previsto">
   <div class="row-between">
-    <h2>Previsto este mes</h2>
+    <h2>Por pagar y guardar</h2>
     <span class="num strong">{{ forecast.pending_total|eur }}</span>
   </div>
   <ul class="plain">
-    {% for u in forecast.lines %}
-    <li class="previsto-linea {{ 'hecho' if u.paid }}">
+    {% for u in forecast.pending %}
+    <li class="previsto-linea">
       <span class="previsto-que">
         {{ icono("deudas" if u.kind == "cuota" else "sobre") }}
-        {% if u.kind == "cuota" %}Cuota de {{ u.name }}{% else %}Aporte a «{{ u.name }}»{% endif %}
+        {% if u.kind == "cuota" %}{{ u.name }}{% else %}Guardar en «{{ u.name }}»{% endif %}
         <small class="muted">
-          {%- if u.day %}se carga el día {{ u.day }}{% else %}aporte mensual{% endif -%}
+          {%- if u.due %}el {{ u.due.strftime('%d/%m') }}{% elif u.day %}el día {{ u.day }}{% else %}cada mes{% endif -%}
+          {%- if u.next_month %} · del mes que viene{% endif -%}
           {%- if u.partial %} · llevas {{ u.done|eur }} de {{ u.expected|eur }}{% endif -%}
         </small>
       </span>
-      {% if u.paid %}
-      <span class="muted previsto-ok">{{ icono_nivel("ok") }} apuntado</span>
-      {% else %}
       <span class="num previsto-num">{{ u.pending|eur }}</span>
       {% set qa = {"tipo": "gasto", "categoria": u.category_id, "concepto": u.name,
                    "importe": u.pending|importe_input} if u.kind == "cuota"
                   else {"tipo": "aporte_sobre", "sobre": u.envelope_id,
                         "importe": u.pending|importe_input} %}
+      {% if u.next_month %}{% set qa = dict(qa, mes="+1") %}{% endif %}
       <a class="link" href="/nuevo" hx-boost="false" data-qa='{{ qa|tojson }}'>Apuntar</a>
-      {% endif %}
     </li>
     {% endfor %}
   </ul>
-  {% if forecast.pending %}
-  <p class="formula">Tienes {{ forecast.available|eur }} − previsto {{ forecast.pending_total|eur }}
-    = puedes gastar {{ forecast.left|eur }}</p>
-  {% else %}
-  <p class="hint">Ya está todo apuntado: este mes no te queda nada comprometido.</p>
+  {% set hechos = forecast.lines|selectattr("paid")|list|length %}
+  <p class="hint row-between">{% if hechos %}<span>Y {{ hechos }} ya apuntado{{ 's' if hechos != 1 }}.</span>{% else %}<span></span>{% endif %}
+    <a class="more" href="/calendario">{{ icono("calendario") }} Calendario ›</a></p>
+  <details class="como">
+    <summary>¿Qué es esto?</summary>
+    <p class="hint">Tus pagos fijos y los aportes mensuales de tus sobres que todavía no has apuntado. Se restan de
+      «Puedes gastar» para que el dinero que ya tiene dueño no parezca tuyo, y van desapareciendo según los apuntas
+      (un pago cuenta como apuntado cuando los gastos de su categoría cubren el importe).</p>
+  </details>
+</section>
+{% endif %}
+
+<a class="card este-mes" href="/resumen">
+  <div><p class="label">Has cobrado</p><p class="stat-num num">{{ m.income|eur }}</p></div>
+  <div><p class="label">Has gastado</p><p class="stat-num num">{{ m.payroll_spent|eur }}</p></div>
+  <div><p class="label">Has guardado</p><p class="stat-num num">{{ m.saved|eur }}</p></div>
+  <span class="ir" aria-hidden="true">›</span>
+  {% if ritmo_mes and ritmo_mes.average %}
+  <p class="ritmo-mes">A día {{ ritmo_mes.day }}, en el día a día llevas
+    {% if ritmo_mes.diff|abs < 500 %}lo mismo que otros meses{% else %}<b class="num {{ 'mas' if ritmo_mes.diff > 0 else 'menos' }}">{{ ritmo_mes.diff|abs|eur }} {{ "más" if ritmo_mes.diff > 0 else "menos" }}</b>
+    que {{ "el mes pasado" if ritmo_mes.months == 1 else "otros meses" }}{% endif %} a estas alturas</p>
   {% endif %}
-  <p class="hint">Las cuotas de tus préstamos y los aportes mensuales de tus sobres que todavía no has apuntado.
-    Van desapareciendo de aquí a medida que los apuntas, así que a principio de mes ya sabes con cuánto cuentas
-    de verdad. Una cuota se da por apuntada cuando los gastos de su categoría cubren el importe; si el préstamo
-    no tiene categoría, cuando pasa su día.</p>
-</section>
-{% endif %}
-
-{% if sweep %}
-<section class="card sweep">
-  <p class="label">Sobras de {{ month_name(sweep.year, sweep.month) }}</p>
-  <p class="stat-num num">{{ sweep.amount|eur }}</p>
-  <p class="hint">Es lo que te sobró ese mes: lo cobrado menos los gastos y lo que ya guardaste.
-    {% if sweep.enabled %}Se guardará solo en «{{ sweep.envelope.name }}» el día {{ sweep.day }} de cada mes.
-    {% else %}Guardarlo solo está desactivado (se activa en Ajustes → Sobras del mes).{% endif %}</p>
-  <form method="post" action="/sobras">
-    <button class="btn btn-primary btn-block" type="submit">Guardar en «{{ sweep.envelope.name }}» ahora</button>
-  </form>
-  <p class="hint">Recuerda hacer luego la transferencia de verdad a {{ envelope_account }}: la app apunta el dinero,
-    pero no lo mueve. Hasta que la hagas, el cuadre te avisará.</p>
-</section>
-{% endif %}
-
-{% if budget.alerts %}
-<section class="card">
-  <h2>Presupuesto</h2>
-  <ul class="plain">
-    {% for a in budget.alerts %}
-    <li class="level-{{ a.line.level }}">{{ icono_nivel(a.line.level) }} <strong>{{ a.cat.name }}</strong>:
-      {{ a.line.spent|eur }} de {{ a.line.budget|eur }} ({{ a.line.ratio|pct }})</li>
-    {% endfor %}
-  </ul>
-  <a class="more" href="/presupuesto?mes={{ month_key(year, month) }}">Ver presupuesto ›</a>
-</section>
-{% endif %}
+</a>
 
 </div>
 
 <div class="col col-b">
+{% if usa.sobres %}
 <section class="section-head">
-  <h2>Sobres</h2>
+  <h2>Sobres <span class="muted num small">{{ total_envelopes|eur }}</span></h2>
   <a class="more" href="/sobres">Ver todos ›</a>
 </section>
-<div class="env-grid">
-  {% for c in cards %}{{ envelope_card(c) }}{% endfor %}
+<div class="card list compacta">
+  {% for c in cards %}
+  {% set e, st = c.env, c.st %}
+  <a class="fila" href="/sobres/{{ e.id }}">
+    <span class="fila-nombre">{{ e.name }}
+      {%- if st.target %}<span class="mini-bar" aria-hidden="true"><span style="width: {{ (st.progress * 100)|round(1) }}%"></span></span>{% endif %}</span>
+    <span class="num strong">{{ st.balance|eur }}</span>
+  </a>
+  {% else %}
+  <p class="empty small">Aún no tienes sobres. <a href="/sobres">Crea uno</a> para apartar dinero para algo.</p>
+  {% endfor %}
 </div>
+{% endif %}
 
 <section class="section-head">
-  <h2>Cuentas</h2>
+  <h2>Cuentas <span class="muted num small">{{ total_cuentas|eur }}</span></h2>
   <a class="more" href="/cuentas">Ver todas ›</a>
 </section>
-<div class="card">
-  <ul class="plain">
-    {% for c in cuentas %}
-    <li class="row-between">
-      <a href="/cuentas/{{ c.account.id }}">{{ c.account.name }}</a>
-      <span class="num">{{ c.balance|eur }}{% if c.in_envelopes %} <small class="muted">· libre {{ c.free|eur }}</small>{% endif %}</span>
-    </li>
-    {% endfor %}
-    <li class="row-between strong"><span>Total</span><span class="num">{{ total_cuentas|eur }}</span></li>
-  </ul>
-  <p class="hint">Lo que hay en cada cuenta, calculado con tus movimientos. «Libre» es lo que queda
-    después de lo que tienes apartado en sobres.</p>
+<div class="card list compacta">
+  {% for c in cuentas %}
+  <a class="fila" href="/cuentas/{{ c.account.id }}">
+    <span class="fila-nombre">{{ c.account.name }}{% if not c.account.spendable %} <span class="badge">aparte</span>{% endif %}</span>
+    <span class="num"><span class="strong">{{ c.balance|eur }}</span>{% if c.in_envelopes %}<small class="muted"> · libre {{ c.free|eur }}</small>{% endif %}</span>
+  </a>
+  {% endfor %}
 </div>
-
-<section class="stats two">
-  <a class="card stat {{ 'level-pasado' if debts.ratio is not none and debts.ratio > debts.limit }}" href="/deudas">
-    <p class="label">Cuotas / nómina</p>
-    <p class="stat-num num">{{ debts.ratio|pct1 }}</p>
-    <p class="hint">Parte de tu nómina que se va en cuotas de préstamos. Te avisa por encima del {{ debts.limit|pct }}.</p>
-  </a>
-  <a class="card stat" href="/sobres">
-    <p class="label">Total en sobres</p>
-    <p class="stat-num num">{{ total_envelopes|eur }}</p>
-    <p class="hint">Dinero que tienes apartado para algo concreto.</p>
-  </a>
-</section>
+</div>
 {% endblock %}

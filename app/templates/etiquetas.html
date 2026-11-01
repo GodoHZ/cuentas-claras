@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% from "_iconos.html" import icono %}
+{% block title %}Etiquetas · Finanzas{% endblock %}
+{% block heading %}Etiquetas{% endblock %}
+{% block main %}
+<section class="card hero">
+  <p class="label">Viajes y eventos</p>
+  <p class="hint">Junta gastos de categorías distintas bajo un mismo nombre («Roma 2026», «Navidad», «Boda de Ana») y mira
+    cuánto te costó todo junto. Se ponen desde cada movimiento o, aquí abajo, a todos los gastos de unas fechas.</p>
+</section>
+
+{% if etiquetas %}
+<div class="card list compacta">
+  {% for t in etiquetas %}
+  <a class="fila" href="/etiquetas/{{ t.id }}">
+    <span class="fila-nombre">{{ icono("etiqueta") }} {{ t.name }}
+      <small class="muted">{{ t.n }} movimiento{{ 's' if t.n != 1 }}{% if t.first %} · {% if t.first == t.last %}{{ t.first|fecha }}{% else %}{{ t.first|fecha }} – {{ t.last|fecha }}{% endif %}{% endif %}</small></span>
+    <span class="num strong">{{ t.spent|eur }}</span>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty"><p>Aún no tienes etiquetas.</p></div>
+{% endif %}
+
+<details class="card nuevo-fijo" {% if not etiquetas %}open{% endif %}>
+  <summary>{{ icono("nuevo") }} Etiquetar los gastos de unas fechas</summary>
+  <form method="post" action="/etiquetas" class="stack">
+    <label class="legend" for="et-nombre">Nombre</label>
+    <input id="et-nombre" name="nombre" maxlength="40" required placeholder="Ej.: Roma 2026" autocomplete="off">
+    <div class="field-row">
+      <div class="stack"><label class="legend" for="et-desde">Desde</label><input id="et-desde" name="desde" type="date" required></div>
+      <div class="stack"><label class="legend" for="et-hasta">Hasta</label><input id="et-hasta" name="hasta" type="date"></div>
+    </div>
+    <p class="hint">Se le pone a todos los gastos de esas fechas. Luego puedes quitar los que no sean (la compra de casa
+      que hiciste esos días, por ejemplo).</p>
+    <button class="btn btn-primary" type="submit">Etiquetar</button>
+  </form>
+</details>
+{% endblock %}

@@ -25,46 +25,71 @@ Dos ideas la sostienen:
 
 ## Qué hace
 
-- **Panel**: arranca por lo que **puedes gastar**, que se calcula desde el dinero que
-  tienes de verdad (lo que hay en tus cuentas, sin lo apartado en sobres) menos lo que
-  ya está comprometido este mes. Debajo, cómo va el mes: ingresos, gastos, lo guardado
-  y el libre del mes.
-- **Apuntar rápido**: importe con teclado numérico, cuatro tipos de movimiento y
-  las categorías más usadas a un toque. Instalada como PWA, se abre a pantalla completa.
-- **Cuentas**: saldo de cada una, cuánto está apartado en sobres y cuánto queda
-  libre. Los traspasos mueven dinero entre cuentas sin contar como gasto ni ingreso.
-  Cada cuenta decide si **suma en «puedes gastar»**: una tarjeta de comida o la cuenta
-  de la empresa se dejan fuera sin perderlas de vista.
-- **Sobres**: objetivo, aporte mensual, barra de progreso y cuánto falta. Cada uno
-  vive en una cuenta. Las **sobras del mes** pueden guardarse solas en el que elijas.
-- **Cuadre opcional**: apuntas de vez en cuando el saldo que dice el banco y la app
-  te avisa si se le ha escapado algo. Un botón deduce el saldo inicial para que cuadre.
-- **Previsto del mes**: las cuotas de tus préstamos y los aportes mensuales de tus sobres
-  que todavía no has apuntado se descuentan de lo que tienes, así que a principio de mes,
-  con la nómina entera y las cuotas aún sin pasar por el banco, el dinero que va a salir
-  sí o sí no parece tuyo. Cada línea tiene un botón para apuntarla con el importe ya
-  puesto, y desaparece de la lista en cuanto lo haces.
+- **Tu mes va de nómina a nómina**: empieza el día que cobras y acaba el día antes del
+  siguiente cobro (o, si lo prefieres, el día 1). Se llama como el mes que cubre casi
+  entero: del 28/10 al 27/11 es «noviembre».
+- **Inicio**: arranca por lo que **puedes gastar**, que se calcula desde el dinero que
+  tienes de verdad (tus cuentas, sin lo apartado en sobres) menos lo que ya está
+  comprometido, y cuánto sale **al día hasta el próximo cobro**. Debajo, **Para ti**: solo
+  lo que pide que hagas algo (revisar lo del banco, un pago que se carga esta semana, una
+  transferencia pendiente al ahorro, un presupuesto que se pasa).
+- **Apuntar rápido**: tres tipos —**Gasto**, **Ingreso** y **Mover** (entre cuentas, a un
+  sobre o de un sobre)—, las categorías más usadas a un toque y, en un ingreso que no es
+  tuyo del todo (el Bizum de un viaje), **«¿Lo apartas en un sobre?»**.
+- **Lo que sobra va al ahorro**: lo que te queda en las cuentas el día antes de cobrar se
+  guarda solo en el sobre que elijas, y el Inicio te recuerda hacer la transferencia.
+- **Planificar**:
+  - **Sobres** con meta, con aporte mensual o para algo puntual (cuando lo gastas, te
+    ofrece archivarlo). Se crean y se editan desde la propia pantalla.
+  - **Presupuesto** solo para el gasto del día a día; los pagos fijos van aparte, solos.
+  - **Pagos fijos**: préstamos, seguros y suscripciones, con o sin fecha de fin. Entran en
+    lo previsto, y la app sugiere los que se repiten cada mes y aún no están.
+- **Cuentas**: saldo de cada una, lo apartado en sobres y lo libre, **cuadre** opcional con
+  el banco, y cuáles cuentan para el día a día y cuáles van «aparte».
 - **Movimientos del banco, solos**: con [Enable Banking](https://enablebanking.com) (gratis
   para tus propias cuentas), la app trae los movimientos y el saldo cada vez que la abres
   (como mucho cada 15 minutos) y, además, 4 veces al día por su cuenta, que es el máximo
-  que permite la normativa europea cuando no estás delante. Lo que
-  ya hubieras apuntado a mano se reconoce y no se duplica, un traspaso entre dos cuentas
-  tuyas queda como traspaso, y la categoría la aprende de lo que hagas tú: la primera vez
-  que aparece un comercio la supone (Repsol → Gasolina) y lo deja «por revisar».
-- **Presupuesto** por categoría, con avisos configurables.
-- **Deudas**: cuotas pagadas y pendientes, la cuota de este mes (apuntada o no), última
-  cuota y qué parte de la nómina se va en ellas.
-- **Resumen** de 12 meses, en tabla y en gráfico.
+  que permite la normativa europea cuando no estás delante. Lo que ya hubieras apuntado a
+  mano se reconoce y no se duplica, un traspaso entre dos cuentas tuyas queda como
+  traspaso, los nombres salen limpios («Basic-Fit», no «ADEUDO A SU CARGO // …») y la
+  categoría la aprende de ti: lo nuevo llega a la bandeja **Para revisar**, que se vacía
+  con un toque por movimiento.
+- **A este ritmo**: con lo que gastas al día (últimos 30 días, sin pagos fijos), con cuánto
+  llegarás al próximo cobro, o cuánto te faltará.
+- **Me deben**: lo que pagaste por otros. Cuando llega el Bizum por ese importe (del banco o
+  apuntado a mano), se da por cobrado solo; si hay dudas, mira si el concepto lleva el nombre.
+- **Buscador** en Movimientos: en todos los meses, con lo que suma lo encontrado.
+- **Reglas del banco**: «si el concepto dice Airbnb → categoría Viajes y sobre Airbnb». Mandan
+  sobre lo que la app aprende sola, y se aplican también a lo que esté por revisar.
+- **Resumen** de 12 meses, en tabla y en gráfico, y **en qué se va**: lo gastado por categoría
+  frente a tu media de los tres meses anteriores.
+- **Repartir la nómina**: al cobrar, cuánto va a cada sobre y cuánto queda para el día a día,
+  calculado en vivo. Los sobres pueden tener **meta con fecha** («1.200 € para julio»): la app
+  dice cuánto guardar al mes para llegar.
+- **Retenido en el banco**: los pagos con tarjeta que el banco aún no ha contabilizado ya se
+  restan de lo que puedes gastar.
+- **Calendario** del mes con lo gastado cada día, los pagos fijos y el cobro.
+- **Ritmo del mes**: lo que llevas gastado frente a lo que llevabas otros meses el mismo día.
+- **Subidas y cobros dobles**: avisa cuando algo que pagas cada mes sube de precio o se cobra dos veces.
+- **Resumen**: tu dinero día a día, el **patrimonio** (lo que tienes menos lo que debes), **cuántos
+  meses aguantarías** sin cobrar y **tu año** en números.
+- **Etiquetas** para juntar gastos de varias categorías (un viaje, la Navidad) y ver lo que costó todo.
+- **Dividir un gasto** entre varios: cada uno queda apuntado en «Me deben».
+- **Facturas y tickets**: cada movimiento puede enlazar con su documento de Paperless (con la
+  API, la app los propone y deja una nota de vuelta en Paperless).
+- **Avisos por Telegram** (opcional): el cierre de cada mes, el resumen de los domingos y, al
+  momento, los gastos grandes, los presupuestos que se pasan, las subidas y lo que te devuelven.
+- **Qué usas**: Sobres, Presupuesto, Pagos fijos y Bancos se pueden apagar en Ajustes; lo
+  apagado desaparece de la app y sus datos se quedan.
 - **Copias de seguridad** diarias hechas por la propia app, verificadas y rotadas,
   más exportar a CSV/JSON e importar el CSV de una hoja de cálculo.
-- **Dos diseños, un solo código**: barra inferior y botón flotante en el móvil;
-  menú lateral y contenido a varias columnas a partir de 900 px.
+- **Dos diseños, un solo código**: barra flotante y botón + en el móvil; menú lateral y
+  contenido a varias columnas a partir de 900 px. Aspecto de cristal líquido, en claro y
+  en oscuro, que se vuelve sólido con «Reducir transparencia».
 - **Funciona sin conexión**: guarda la última versión de cada pantalla para poder
   consultarla, y lo que apuntes sin red se queda en el móvil y se envía solo al
   volver. Cada movimiento lleva un identificador propio, así que un reenvío nunca
   duplica nada. Con el PIN activado no se guarda ninguna copia en el móvil.
-- **Gestos de móvil**: deslizar un movimiento hacia la izquierda para borrarlo,
-  tirar hacia abajo para actualizar y transiciones suaves entre pantallas.
 
 Todo está en castellano, en euros y con fechas dd/mm/aaaa.
 
@@ -72,7 +97,7 @@ Todo está en castellano, en euros y con fechas dd/mm/aaaa.
 
 ```bash
 git clone https://github.com/GodoHZ/cuentas-claras.git && cd cuentas-claras
-docker build -t finanzas-app:2.6.0 --build-arg VERSION=2.6.0 .
+docker build -t finanzas-app:3.3.0 --build-arg VERSION=3.3.0 .
 docker compose up -d
 ```
 
@@ -150,10 +175,12 @@ de dejar ficheros escondidos debajo.
 - **Libre en una cuenta** = su saldo − lo que tienen los sobres que viven en ella.
 - **Puedes gastar** = saldo de las cuentas que marques como del día a día − lo que
   tengan apartado en sobres − previsto. Lo que vive en una cuenta que no suma no resta.
-- **Previsto** = cuotas del mes + aportes mensuales de los sobres, menos lo que ya hayas
-  apuntado de cada cosa. Una cuota se da por apuntada
-  cuando los gastos de su categoría la cubren, o, si el préstamo no tiene categoría, cuando
-  pasa su día (van domiciliadas).
+- **Previsto** = pagos fijos del mes + aportes mensuales de los sobres, menos lo que ya hayas
+  apuntado de cada cosa (y, si ya has cobrado la nómina del mes siguiente, también lo de
+  ese mes). Un pago fijo se da por apuntado cuando los gastos de su categoría lo cubren,
+  o, si no tiene categoría, cuando pasa su día (van domiciliados).
+- **Lo que sobra** = lo que podías gastar el día antes de cobrar; al día siguiente del
+  cobro se aparta en el sobre elegido.
 - **Cuadre** = lo que dice el banco − lo que calculaba la app **el día de esa
   comprobación** (lo que apuntes después no cuenta como descuadre).
 - Lo que tiene movimientos solo se puede **archivar**, no borrar; lo que no se ha
@@ -169,7 +196,10 @@ gráfico. Sin compilar nada: no hay npm ni bundler.
 
 ```
 app/
-  main.py      rutas web y arranque (FastAPI)
+  main.py      arranque (FastAPI), tareas de fondo y la app
+  web.py       lo común a todas las pantallas: plantillas, avisos, redirecciones
+  rutas/       las pantallas por áreas: inicio, movimientos, cuentas, planificar,
+               ajustes, seguridad, datos, pwa, api y bancos
   calc.py      las reglas de cálculo, puras y con tests
   views.py     junta datos y reglas para cada pantalla
   repo.py      consultas SQL          db.py       esquema y conexión
@@ -178,6 +208,8 @@ app/
   pin.py       PIN opcional           money.py    céntimos y formato español
   banco.py     movimientos del banco (Enable Banking), sin duplicar nada
   clasificar.py  adivina y aprende la categoría de lo que se apunta solo
+  nombres.py   nombres limpios para lo que trae el banco
+  avisos.py    el cierre de mes por Telegram
   templates/   pantallas              static/     CSS, JS e iconos
 tests/         pytest, se ejecutan dentro del docker build
 scripts/       iconos, despliegue en Portainer, capturas con WebKit

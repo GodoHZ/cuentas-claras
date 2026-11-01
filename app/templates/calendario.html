@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% from "_macros.html" import subnav_planificar, month_nav with context %}
+{% from "_iconos.html" import icono %}
+{% block title %}Calendario · Finanzas{% endblock %}
+{% block heading %}Planificar{% endblock %}
+{% block main %}
+{{ subnav_planificar("calendario") }}
+{{ month_nav("/calendario", year, month) }}
+
+<section class="card calendario" aria-label="Calendario del {{ c.from|fecha }} al {{ c.to|fecha }}">
+  <div class="cal-semana cal-cabecera" aria-hidden="true">
+    {% for d in ["L", "M", "X", "J", "V", "S", "D"] %}<span>{{ d }}</span>{% endfor %}
+  </div>
+  {% for semana in c.weeks %}
+  <div class="cal-semana">
+    {% for d in semana %}
+    {% if d %}
+    {% set nivel = (d.spent / c.max_spent) if c.max_spent else 0 %}
+    <a class="cal-dia {{ 'hoy' if d.today }} {{ 'pasado' if d.past }}"
+       href="/movimientos?mes={{ month_key(year, month) }}#dia-{{ d.date.isoformat() }}"
+       style="--gasto: {{ (nivel * 100)|round|int }}%"
+       aria-label="{{ d.date|dia_largo }}{% if d.spent %}: gastaste {{ d.spent|eur }}{% endif %}{% for e in d.events %}. {{ e.name }}{% if e.amount %} {{ e.amount|eur }}{% endif %}{% endfor %}">
+      <span class="cal-num">{{ d.date.day }}</span>
+      {% if d.spent %}<span class="cal-gasto num">{{ (d.spent // 100) }}</span>{% endif %}
+      {% if d.events %}<span class="cal-marcas" aria-hidden="true">
+        {% for e in d.events %}<i class="cal-{{ e.kind }} {{ 'hecho' if e.paid }}"></i>{% endfor %}</span>{% endif %}
+    </a>
+    {% else %}<span class="cal-dia vacio" aria-hidden="true"></span>{% endif %}
+    {% endfor %}
+  </div>
+  {% endfor %}
+  <p class="cal-leyenda muted small" aria-hidden="true">
+    <span><i class="cal-pago"></i> pago fijo</span><span><i class="cal-cobro"></i> cobro</span>
+    <span><b class="cal-tono"></b> más gasto, más color</span></p>
+  <p class="hint">El número de cada día es lo que gastaste (en euros). En total, <b class="num">{{ c.spent_total|eur }}</b>.</p>
+</section>
+
+{% if c.upcoming %}
+<section class="card">
+  <h2>Lo que viene</h2>
+  <ul class="plain">
+    {% for d, e in c.upcoming %}
+    <li class="previsto-linea">
+      <span class="previsto-que">{{ icono("nomina" if e.kind == "cobro" else "deudas") }} {{ e.name }}
+        <small class="muted">{{ d|dia_largo }}</small></span>
+      <span class="num previsto-num">{% if e.amount %}{{ e.amount|eur_sign if e.kind == "cobro" else (0 - e.amount)|eur }}{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% set hechos = c.agenda|selectattr("1.paid")|list %}
+{% if hechos %}
+<section class="card">
+  <h2>Ya pasó</h2>
+  <ul class="plain">
+    {% for d, e in hechos %}
+    <li class="previsto-linea hecho">
+      <span class="previsto-que">{{ icono("check") }} {{ e.name }} <small class="muted">{{ d|dia_largo }}</small></span>
+      <span class="num previsto-num">{% if e.amount %}{{ e.amount|eur_sign if e.kind == "cobro" else (0 - e.amount)|eur }}{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if c.envelopes %}
+<section class="card">
+  <h2>Guardar este mes <span class="muted small">(sin día fijo)</span></h2>
+  <ul class="plain">
+    {% for u in c.envelopes %}
+    <li class="previsto-linea {{ 'hecho' if u.paid }}">
+      <span class="previsto-que">{{ icono("check" if u.paid else "sobre") }} «{{ u.name }}»
+        {% if u.partial %}<small class="muted">llevas {{ u.done|eur }}</small>{% endif %}</span>
+      <span class="num previsto-num">{{ u.expected|eur }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

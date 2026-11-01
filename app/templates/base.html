@@ -4,8 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{% block title %}Finanzas{% endblock %}</title>
-<meta name="theme-color" content="#f9f9f7" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#eef4f8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#070c11" media="(prefers-color-scheme: dark)">
+<link rel="preload" href="/static/fonts/nunito.woff2" as="font" type="font/woff2" crossorigin>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Finanzas">
@@ -23,6 +24,11 @@
 <header class="top">
   {% if back %}<a class="back" href="{{ back }}" aria-label="Volver">‹ Volver</a>{% endif %}
   <h1>{% block heading %}Finanzas{% endblock %}</h1>
+  {#- En el móvil, Resumen y Ajustes van arriba (en el ordenador, en el menú de la izquierda) -#}
+  {% if not hide_nav %}<span class="top-acciones solo-movil">
+    <a class="boton-redondo" href="/resumen" aria-label="Resumen" title="Resumen">{{ icono("resumen") }}</a>
+    <a class="boton-redondo" href="/ajustes" aria-label="Ajustes" title="Ajustes">{{ icono("ajustes") }}</a>
+  </span>{% endif %}
 </header>
 
 <main id="main" class="{% block main_class %}{% endblock %}">
@@ -37,24 +43,17 @@
     <span class="side-title">Finanzas</span>
     <a class="btn btn-primary side-add" href="/nuevo" hx-boost="false" data-qa="{}">+ Apuntar</a>
   </div>
-  <a href="/" class="{{ 'on' if nav == 'inicio' }}" {% if nav == 'inicio' %}aria-current="page"{% endif %}>
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11.5 12 4l9 7.5M5.5 10v10h5v-6h3v6h5V10"/></svg>Inicio</a>
-  <a href="/movimientos" class="{{ 'on' if nav == 'movimientos' }}" {% if nav == 'movimientos' %}aria-current="page"{% endif %}>
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>Movimientos</a>
-  <a href="/cuentas" class="solo-pc {{ 'on' if request.url.path.startswith('/cuentas') }}">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 14h3"/></svg>Cuentas</a>
-  <a href="/sobres" class="{{ 'on' if nav == 'sobres' }}" {% if nav == 'sobres' %}aria-current="page"{% endif %}>
-    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="m3.5 7 8.5 6 8.5-6"/></svg>Sobres</a>
-  <a href="/presupuesto" class="{{ 'on' if nav == 'presupuesto' }}" {% if nav == 'presupuesto' %}aria-current="page"{% endif %}>
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Presupuesto</a>
-  <a href="/resumen" class="solo-pc {{ 'on' if nav == 'mas' and request.url.path == '/resumen' }}">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5M4 19h16M8 15l4-5 3 3 4-6"/></svg>Resumen</a>
-  <a href="/deudas" class="solo-pc {{ 'on' if request.url.path == '/deudas' }}">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10 12 4l9 6M5 10v9h14v-9M9 19v-5h6v5"/></svg>Deudas</a>
-  <a href="/ajustes" class="solo-pc {{ 'on' if request.url.path.startswith('/ajustes') }}">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 3.5v2M12 18.5v2M4.6 7.8l1.7 1M17.7 15.2l1.7 1M4.6 16.2l1.7-1M17.7 8.8l1.7-1"/></svg>Ajustes</a>
-  <a href="/mas" class="solo-movil {{ 'on' if nav == 'mas' }}" {% if nav == 'mas' %}aria-current="page"{% endif %}>
-    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg>Más</a>
+  {% set planificar = "/sobres" if usa.sobres else ("/presupuesto" if usa.presupuesto else ("/fijos" if usa.fijos else none)) %}
+  {% for href, key, label, path in [
+       ("/", "inicio", "Inicio", "M3 11.5 12 4l9 7.5M5.5 10v10h5v-6h3v6h5V10"),
+       ("/movimientos", "movimientos", "Movimientos", "M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"),
+       (planificar, "planificar", "Planificar", "M4 20V10M10 20V4M16 20v-7M22 20H2"),
+       ("/cuentas", "cuentas", "Cuentas", "M3 7.5h18v11H3zM3 11h18M7 15h3"),
+       ("/resumen", "resumen", "Resumen", "M4 19V5M4 19h16M8 15l4-5 3 3 4-6"),
+       ("/ajustes", "ajustes", "Ajustes", "M12 8.8a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4zM12 3.5v2M12 18.5v2M4.6 7.8l1.7 1M17.7 15.2l1.7 1M4.6 16.2l1.7-1M17.7 8.8l1.7-1")] if href %}
+  <a href="{{ href }}" class="{{ 'on' if nav == key }}{{ ' solo-pc' if key in ('resumen', 'ajustes') }}" {% if nav == key %}aria-current="page"{% endif %}>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="{{ path }}"/></svg>{{ label }}</a>
+  {% endfor %}
 </nav>
 {% endif %}
 

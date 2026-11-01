@@ -57,7 +57,7 @@ def test_lo_que_falta_por_revisar_se_ve(client, db_path):
                        account_id=accs["Cuenta corriente"], concept="Ferretería Paco", amount=900,
                        source="banco", review=1)
     conn.close()
-    assert "1 gasto por revisar" in client.get("/").text
+    assert "1 movimiento por revisar" in client.get("/").text
     lista = client.get("/movimientos?mes=todos&revisar=1").text
     assert "Ferretería Paco" in lista and "badge-revisar" in lista
 

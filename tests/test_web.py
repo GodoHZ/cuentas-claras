@@ -1,7 +1,7 @@
 """Las pantallas: que responden, que guardan y que enseñan las cifras buenas."""
 from datetime import date
 
-from app import calc, db, repo
+from app import calc, db, repo, views
 from conftest import apuntar, ids
 
 
@@ -14,7 +14,7 @@ def get(client, url, code=200):
 def test_todas_las_pantallas_responden(client):
     for url in ["/", "/movimientos", "/movimientos?mes=todos", "/sobres", "/presupuesto",
                 "/resumen", "/deudas", "/mas", "/ajustes", "/nuevo", "/ajustes/importar",
-                "/salud", "/manifest.webmanifest", "/sw.js", "/offline"]:
+                "/salud", "/manifest.webmanifest", "/sw.js", "/offline", "/fijos"]:
         get(client, url)
 
 
@@ -25,9 +25,9 @@ def test_panel_ensena_las_cifras(client, db_path):
     apuntar(conn, "2026-09-03", calc.APORTE, 30000, sobre="Colchón", cuenta="Cuenta de ahorro")
     conn.close()
     html = get(client, "/").text
-    assert "Libre" in html
-    assert "700,00 €" in html          # 1.500 − 500 − 300
-    assert "300,00 €" in html          # total en sobres y saldo de la cuenta de ahorro
+    assert "Puedes gastar" in html and "Has gastado" in html
+    assert "500,00\u00a0€" in html          # lo gastado este mes
+    assert "300,00\u00a0€" in html          # total en sobres y saldo de la cuenta de ahorro
     assert "Cuentas" in html
 
 
@@ -304,7 +304,7 @@ def test_reglas_configurables(client, db_path):
                                          "reconcile_small_cents": "1", "backup_keep_days": "7"})
     html = get(client, "/presupuesto?mes=2026-09").text
     assert "Cerca del límite" in html            # con el aviso al 60 %, ahora sí
-    assert "Te avisa por encima del 15" in get(client, "/").text
+    assert "aviso en el 15" in get(client, "/deudas").text
     conn = db.connect(db_path)
     assert repo.rule(conn, "backup_keep_days") == 7
     conn.close()
@@ -507,3 +507,74 @@ def test_ajustar_sin_comprobacion_previa_avisa(client, db_path):
     conn.close()
     r = client.post(f"/cuentas/{corriente}/ajustar-inicial", follow_redirects=True)
     assert "Primero apunta el saldo" in r.text
+
+
+def test_tres_tipos_y_la_bandeja(client, db_path):
+    conn = db.connect(db_path)
+    cats, envs, accs = ids(conn)
+    with conn:
+        tx = repo.insert_tx(conn, date="2026-09-10", type="gasto", category_id=cats["Otros gastos"], envelope_id=None,
+                            account_id=accs["Cuenta corriente"], amount=7482, source="banco", review=1,
+                            concept="PAGO CON TARJETA EN GASOLINERAS // PAGO CON TARJETA // PASEO CASTELLANA MADRID ES")
+    conn.close()
+    html = get(client, "/movimientos").text
+    assert 'id="revisar"' in html and "Paseo Castellana Madrid" in html and "PAGO CON TARJETA" not in html
+    r = client.post(f"/movimientos/{tx}/confirmar", data={"categoria_id": cats["Casa"]}, headers={"HX-Request": "true"})
+    assert r.status_code == 200 and "txConfirmado" in r.headers["hx-trigger"]
+    conn = db.connect(db_path)
+    fila = repo.get_tx(conn, tx)
+    assert (fila["review"], fila["category"]) == (0, "Casa")
+    conn.close()
+    assert 'id="revisar"' not in get(client, "/movimientos").text
+    # «Mover» a un sobre es un aporte
+    client.post("/movimientos/nuevo", data={"tipo": "mover", "mover": "aporte_sobre", "importe": "50",
+                                            "sobre_id": envs["Colchón"], "cuenta_id": accs["Cuenta de ahorro"],
+                                            "fecha": "2026-09-11", "concepto": "guardo"})
+    conn = db.connect(db_path)
+    assert [r["type"] for r in repo.tx_rows(conn) if r["concept"] == "guardo"] == ["aporte_sobre"]
+    conn.close()
+    nuevo = get(client, "/nuevo").text
+    assert 'value="mover"' in nuevo and 'name="mover" value="aporte_sobre"' in nuevo
+
+
+def test_lo_que_no_usas_desaparece(client, db_path):
+    client.post("/ajustes/modulos", data={"presupuesto": "1", "fijos": "1"})     # sin sobres ni bancos
+    conn = db.connect(db_path)
+    assert repo.modules(conn) == {"sobres": False, "presupuesto": True, "fijos": True, "bancos": False}
+    with conn:
+        conn.execute("UPDATE envelopes SET monthly = 5000")
+    previsto = views.forecast(conn, repo.all_txs(conn), 2026, 9, date(2026, 9, 19))
+    assert not [u for u in previsto.lines if u.kind == calc.APORTE_MENSUAL]
+    conn.close()
+    inicio = get(client, "/").text
+    assert 'href="/sobres" class=""' not in inicio and "Ver todos ›" not in inicio
+    assert 'href="/presupuesto"' in inicio                       # Planificar va al primero que usas
+    assert "¿Lo apartas en un sobre?" not in get(client, "/nuevo").text
+    assert 'href="/sobres"' not in get(client, "/presupuesto").text
+    client.post("/ajustes/modulos", data={m: "1" for m in repo.MODULES})
+    assert "Ver todos ›" in get(client, "/").text
+
+
+def test_confirmar_algo_que_ya_no_existe_recarga_y_avisa(client):
+    r = client.post("/movimientos/99999/confirmar", headers={"HX-Request": "true"})
+    assert r.status_code == 200 and r.headers["hx-refresh"] == "true" and "flash" in r.headers.get("set-cookie", "")
+
+
+def test_un_traspaso_por_revisar_se_manda_a_su_sobre_con_un_toque(client, db_path):
+    conn = db.connect(db_path)
+    cats, envs, accs = ids(conn)
+    with conn:
+        conn.execute("UPDATE envelopes SET monthly = 30000, account_id = ? WHERE id = ?",
+                     (accs["Cuenta de ahorro"], envs["Colchón"]))
+        tx = repo.insert_tx(conn, date="2026-09-10", type="traspaso", category_id=None, envelope_id=None,
+                            account_id=accs["Cuenta de ahorro"], other_account_id=accs["Cuenta corriente"],
+                            amount=30000, source="banco", review=1, concept="Traspaso desde Cuenta corriente")
+    conn.close()
+    html = get(client, "/movimientos").text
+    assert f'<option value="{envs["Colchón"]}" selected>Al sobre «Colchón»</option>' in html     # lo adivina
+    client.post(f"/movimientos/{tx}/confirmar", data={"sobre_id": envs["Colchón"]}, headers={"HX-Request": "true"})
+    conn = db.connect(db_path)
+    fila = repo.get_tx(conn, tx)
+    assert (fila["type"], fila["envelope"], fila["other_account"], fila["review"]) == \
+        ("aporte_sobre", "Colchón", "Cuenta corriente", 0)
+    conn.close()

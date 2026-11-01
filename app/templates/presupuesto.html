@@ -1,17 +1,22 @@
 {% extends "base.html" %}
-{% from "_macros.html" import month_nav, budget_bar %}
+{% from "_macros.html" import subnav_planificar with context %}
+{% from "_macros.html" import month_nav, budget_bar with context %}
 {% from "_iconos.html" import icono, icono_nivel %}
 {% block title %}Presupuesto · Finanzas{% endblock %}
-{% block heading %}Presupuesto{% endblock %}
+{% block heading %}Planificar{% endblock %}
 {% block main %}
+{{ subnav_planificar("presupuesto") }}
 {{ month_nav("/presupuesto", year, month) }}
 
 <div class="card total-card">
-  <p class="label">Presupuesto del mes</p>
+  <p class="label">Gasto del día a día</p>
   <p class="stat-num num">{{ b.total.spent|eur }} <span class="of">de {{ b.total.budget|eur }}</span></p>
-  {{ budget_bar(b.total, "Total de las categorías con presupuesto") }}
-  <p class="hint">El presupuesto es lo máximo que te propones gastar cada mes en cada cosa. Aquí cuentan
-    <strong>todos</strong> los gastos, también los pagados desde un sobre.</p>
+  {{ budget_bar(b.total, "Total de las categorías con tope") }}
+  <details class="como">
+    <summary>¿Qué es esto?</summary>
+    <p class="hint">Lo máximo que te propones gastar cada mes en lo que varía (comida, gasolina, ocio…). Cuentan
+      <strong>todos</strong> los gastos, también los pagados desde un sobre. Los pagos fijos van aparte, abajo.</p>
+  </details>
   <p class="legend-levels"><span class="lv lv-ok">menos del {{ b.warn_pct|pct }}</span>
     <span class="lv lv-aviso">{{ b.warn_pct|pct }}–100 %</span>
     <span class="lv lv-pasado">más del 100 %</span></p>
@@ -28,6 +33,38 @@
 <a class="btn btn-primary btn-block" href="/presupuesto/editar?mes={{ month_key(year, month) }}">
   {{ icono("editar") }} Editar presupuestos</a>
 <p class="hint center">Cambia los topes, crea categorías nuevas o quita los que no quieras. Es todo tuyo.</p>
+
+{% if b.fixed %}
+<section class="section-head">
+  <h2>Pagos fijos <span class="muted num small">{{ b.fixed_total|eur }}</span></h2>
+  <a class="more" href="/fijos">Gestionar ›</a>
+</section>
+<div class="card list compacta">
+  {% for f in b.fixed %}
+  <a class="fila" href="/fijos">
+    <span class="fila-nombre">{{ f.loan.name }} <small class="muted">{{ f.cat.name }}</small></span>
+    <span class="num">{% if f.line.spent >= f.loan.installment %}<span class="ok-texto">{{ icono("check") }} apuntado</span>
+      {% else %}{{ f.line.spent|eur }} <small class="muted">de {{ f.loan.installment|eur }}</small>{% endif %}</span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if b.savings %}
+<section class="section-head">
+  <h2>Guardar en sobres <span class="muted num small">{{ b.savings|sum(attribute="monthly")|eur }}</span></h2>
+  <a class="more" href="/sobres">Sobres ›</a>
+</section>
+<div class="card list compacta">
+  {% for s in b.savings %}
+  <a class="fila" href="/sobres/{{ s.env.id }}">
+    <span class="fila-nombre">{{ s.env.name }}</span>
+    <span class="num">{% if s.done >= s.monthly %}<span class="ok-texto">{{ icono("check") }} hecho</span>
+      {% else %}{{ s.done|eur }} <small class="muted">de {{ s.monthly|eur }}</small>{% endif %}</span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
 
 {% if b.others %}
 <h2 class="section-title">Otros gastos del mes (sin presupuesto)</h2>

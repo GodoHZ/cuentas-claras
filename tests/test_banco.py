@@ -393,3 +393,18 @@ def test_al_abrir_la_app_mira_el_banco_una_vez_cada_15_minutos(client, db_path, 
     assert "Mirando si hay movimientos nuevos" not in client.get("/").text
     llamadas = len(falso.llamadas)
     assert client.post("/banco/al-abrir").text == "" and len(falso.llamadas) == llamadas
+
+
+def test_actualizar_desde_el_inicio_no_espera_los_15_minutos(client, db_path, monkeypatch):
+    falso = BancoFalso(movimientos={"u-corriente": [[mov("2026-09-18", "4.20", "CAFETERIA SOL", ref="w2")]]})
+    monkeypatch.setattr(banco.Client, "from_settings", classmethod(lambda cls, conn: falso))
+    monkeypatch.setattr(banco, "configured", lambda conn: True)
+    conn = db.connect(db_path)
+    conectar(conn, falso, desde="2026-09-18")
+    conn.close()
+    client.post("/banco/al-abrir")                                    # recién mirado
+    assert "Banco actualizado" in client.get("/").text
+    llamadas = len(falso.llamadas)
+    r = client.post("/banco/actualizar", follow_redirects=True)
+    assert len(falso.llamadas) > llamadas                              # vuelve a mirar igualmente
+    assert "movimiento" in r.text

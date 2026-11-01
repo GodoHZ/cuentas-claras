@@ -1,7 +1,7 @@
 {% extends "base.html" %}
+{% from "_iconos.html" import icono %}
 {% block title %}Resumen · Finanzas{% endblock %}
 {% block heading %}Resumen de 12 meses{% endblock %}
-{% set back = "/mas" %}
 {% block main %}
 {% set py, pm = add_months(start[0], start[1], -12) %}{% set ny, nm = add_months(start[0], start[1], 12) %}
 <div class="month-nav">
@@ -9,6 +9,80 @@
   <strong>{{ month_short(start[0], start[1]) }} – {{ month_short(months[-1].year, months[-1].month) }}</strong>
   <a href="/resumen?desde={{ month_key(ny, nm) }}" aria-label="12 meses siguientes">›</a>
 </div>
+
+{% if evolucion %}
+{% set e = evolucion %}
+<section class="card chart-card evolucion" id="evolucion">
+  <div class="row-between">
+    <h2>Tu dinero</h2>
+    <span class="num strong">{{ e.now|eur }}</span>
+  </div>
+  <p class="evolucion-cifras">
+    <b class="num {{ 'dinero-sube' if e.change_30 >= 0 else 'dinero-baja' }}">{{ e.change_30|eur_sign }}</b> en {{ e.days_30 }} días
+    {%- if e.change_all != e.change_30 %} · <span class="num">{{ e.change_all|eur_sign }}</span> desde el {{ e.since|fecha }}{% endif %}</p>
+  <div class="chart-legend" aria-hidden="true">
+    <span><i class="sw sw-1"></i>En tus cuentas</span><span><i class="sw sw-3"></i>Apartado en sobres ({{ e.envelopes|eur }})</span>
+  </div>
+  <div class="chart-box"><canvas id="chart-evolucion" data-chart="evolucion" role="img"
+       aria-label="Gráfico de líneas con lo que tenías cada día en tus cuentas y en sobres. Hoy: {{ e.now|eur }}."></canvas></div>
+  <script type="application/json" id="chart-evolucion-data">{{ evolucion_json|safe }}</script>
+  <p class="hint">Todo lo que hay en tus cuentas cada día (también las «aparte»), calculado con tus movimientos.
+    Los dientes de sierra son normales: sube al cobrar y baja durante el mes. Lo que importa es que cada pico sea más alto.</p>
+</section>
+{% endif %}
+
+{% set p = patrimonio %}
+<section class="card chart-card patrimonio" id="patrimonio">
+  <div class="row-between">
+    <h2>Patrimonio</h2>
+    <span class="num strong {{ 'neg' if p.total < 0 }}">{{ p.total|eur }}</span>
+  </div>
+  <ul class="plain desglose">
+    <li><span>En tus cuentas <small class="muted">(sobres incluidos)</small></span><span class="num">{{ p.accounts|eur }}</span></li>
+    {% if p.owed %}<li><span>Te deben</span><span class="num">{{ p.owed|eur_sign }}</span></li>{% endif %}
+    {% if p.debt %}<li><span>Te queda por pagar de préstamos</span><span class="num">{{ (0 - p.debt)|eur }}</span></li>{% endif %}
+  </ul>
+  {% if p.change_month is not none %}
+  <p class="evolucion-cifras"><b class="num {{ 'dinero-sube' if p.change_month >= 0 else 'dinero-baja' }}">{{ p.change_month|eur_sign }}</b> desde el final del mes pasado</p>
+  {% endif %}
+  {% if patrimonio_json %}
+  <div class="chart-box chart-bajo"><canvas id="chart-patrimonio" data-chart="patrimonio" role="img"
+       aria-label="Gráfico de líneas con tu patrimonio al final de cada mes. Hoy: {{ p.total|eur }}."></canvas></div>
+  <script type="application/json" id="chart-patrimonio-data">{{ patrimonio_json|safe }}</script>
+  {% endif %}
+  <p class="hint">Lo que tienes menos lo que debes, al final de cada mes. Los préstamos restan lo que te queda por pagar;
+    las suscripciones y los seguros no son deuda. Solo cuenta el dinero: lo que compraste con el préstamo (el coche,
+    la casa) no suma, así que al principio de un préstamo es normal verlo en negativo. Lo que importa es que suba.</p>
+</section>
+
+{% if aguante and aguante.months %}
+{% set a = aguante %}
+<section class="card aguante" id="aguante">
+  <h2>{{ icono("escudo") }} Si dejaras de cobrar</h2>
+  <p class="aguante-num"><b class="num">{{ "%.1f"|format(a.months)|replace(".", ",") }}</b> meses
+    <span class="muted">gastando como ahora</span></p>
+  {% if a.months_fixed %}<p class="hint">Y {{ "%.0f"|format(a.months_fixed) if a.months_fixed >= 10 else ("%.1f"|format(a.months_fixed)|replace(".", ",")) }} meses
+    si solo pagaras lo fijo ({{ a.monthly_fixed|eur }} al mes).</p>{% endif %}
+  <div class="bar bar-aguante" role="img" aria-label="{{ '%.1f'|format(a.months) }} de 6 meses">
+    <span style="width: {{ [a.months / 6 * 100, 100]|min|round(1) }}%"></span><i style="left: 50%"></i></div>
+  <p class="hint">Tienes {{ a.money|eur }} entre todas tus cuentas y gastas de media {{ a.monthly_spend|eur }} al mes
+    ({% if a.months_seen <= 1 %}el último mes{% else %}los últimos {{ a.months_seen }} meses{% endif %}, sin lo pagado
+    desde sobres). Lo que se suele aconsejar es tener un colchón de
+    entre 3 y 6 meses de gastos (la rayita marca 3).
+    {% if a.months < 3 %}Vas por debajo: el sobre de ahorro es buen sitio para ir subiéndolo.{% elif a.months >= 6 %}Lo tienes cubierto.{% endif %}</p>
+</section>
+{% endif %}
+
+<nav class="resumen-enlaces">
+  {% for y in anos[:2] %}
+  <a class="card fila-enlace" href="/resumen/anual?ano={{ y }}">
+    <span><strong>{{ icono("estrella") }} Tu {{ y }}</strong><small class="muted">El año en números: tu mejor mes, en qué y dónde se fue más</small></span>
+    <span aria-hidden="true">›</span></a>
+  {% endfor %}
+  <a class="card fila-enlace" href="/etiquetas">
+    <span><strong>{{ icono("etiqueta") }} Etiquetas</strong><small class="muted">{% if n_etiquetas %}{{ n_etiquetas }} etiqueta{{ 's' if n_etiquetas != 1 }}: lo que te costó cada viaje o evento{% else %}Cuánto te costó un viaje o un evento, todo junto{% endif %}</small></span>
+    <span aria-hidden="true">›</span></a>
+</nav>
 
 <div class="card chart-card">
   <h2>Ingresos, gastos y aportado por mes</h2>
@@ -28,7 +102,7 @@
       <thead><tr><th>Mes</th><th>Ingresos</th><th>Gastos</th><th>Aportado</th><th>Libre</th><th class="col-ahorro">% ahorro</th></tr></thead>
       <tbody>
         {% for m in months %}
-        <tr class="{{ 'current' if (m.year, m.month) == (hoy.year, hoy.month) }}">
+        <tr class="{{ 'current' if (m.year, m.month) == actual }}">
           <th scope="row"><a href="/?mes={{ month_key(m.year, m.month) }}">{{ month_short(m.year, m.month) }}</a></th>
           <td class="num">{{ m.income|eur }}</td><td class="num">{{ m.payroll_spent|eur }}</td>
           <td class="num">{{ m.saved|eur }}</td><td class="num {{ 'neg' if m.free < 0 }}">{{ m.free|eur }}</td>
@@ -43,5 +117,28 @@
   <p class="hint"><b>Gastos</b> son los de la nómina (sin lo pagado desde sobres). <b>Libre</b> = ingresos − gastos − aportado.
     <b>% ahorro</b> (aportado ÷ ingresos) se ve girando el móvil o en pantalla grande. Toca un mes para ver su panel.</p>
 </div>
+{% if trends %}
+{% set ty, tm = trends_month %}
+{% set py, pm = add_months(ty, tm, -1) %}{% set ny, nm = add_months(ty, tm, 1) %}
+<section class="card tendencias" id="en-que">
+  <div class="row-between">
+    <h2>En qué se va · {{ month_name(ty, tm) }}</h2>
+    <span class="row-actions"><a class="link" href="/resumen?mes={{ month_key(py, pm) }}#en-que" aria-label="Mes anterior">‹</a>
+      <a class="link" href="/resumen?mes={{ month_key(ny, nm) }}#en-que" aria-label="Mes siguiente">›</a></span>
+  </div>
+  <p class="hint">Cada barra es lo gastado ese mes; la rayita, tu media de los tres meses anteriores.</p>
+  {% for f in trends %}
+  <div class="fila-tend">
+    <span>{{ f.name }}</span>
+    <span class="num"><b>{{ f.spent|eur }}</b>
+      {%- if f.change is not none and (f.change > 0.15 or f.change < -0.15) %}
+      <span class="tend-cambio {{ 'sube' if f.change > 0 else 'baja' }}">{{ "+" if f.change > 0 }}{{ (f.change * 100)|round|int }} %</span>{% endif %}</span>
+    <span class="tend-barras" aria-hidden="true"><span style="width: {{ (f.bar * 100)|round(1) }}%"></span>
+      {%- if f.average %}<i style="left: {{ (f.avg_bar * 100)|round(1) }}%"></i>{% endif %}</span>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
 {% if start != default_start %}<p class="center"><a href="/resumen">Volver al año que empieza en {{ month_short(default_start[0], default_start[1]) }}</a></p>{% endif %}
 {% endblock %}

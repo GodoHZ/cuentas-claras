@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% from "_iconos.html" import icono %}
+{% block title %}Tu {{ ano }} · Finanzas{% endblock %}
+{% block heading %}Tu {{ ano }}{% endblock %}
+{% block main %}
+{% if anos|length > 1 %}
+<nav class="subnav" aria-label="Año">
+  {% for y in anos %}<a href="/resumen/anual?ano={{ y }}" class="{{ 'on' if y == ano }}" {% if y == ano %}aria-current="page"{% endif %}>{{ y }}</a>{% endfor %}
+</nav>
+{% endif %}
+
+{% if not r %}
+<div class="empty"><p>No hay movimientos en {{ ano }}.</p></div>
+{% else %}
+{% set t = r.total %}
+<section class="card hero ano-hero">
+  <p class="label">{{ icono("estrella") }} {% if en_curso %}En lo que va de {{ ano }}{% else %}En {{ ano }}{% endif %}
+    <span class="muted">· {{ r.n_months }} mes{{ 'es' if r.n_months != 1 }} con datos</span></p>
+  <div class="ano-cifras">
+    <div><p class="label">Cobraste</p><p class="stat-num num">{{ t.income|eur }}</p></div>
+    <div><p class="label">Gastaste</p><p class="stat-num num">{{ r.spent_all|eur }}</p></div>
+    <div><p class="label">Guardaste</p><p class="stat-num num">{{ t.saved|eur }}</p></div>
+  </div>
+  {% if t.saved_ratio is not none %}
+  <p class="hero-linea">Apartaste en sobres el <b class="num">{{ t.saved_ratio|pct }}</b> de lo que cobraste
+    {%- if t.free > 0 %} y te quedaron <b class="num">{{ t.free|eur }}</b> libres{% endif %}.</p>
+  {% endif %}
+</section>
+
+<section class="card ano-destacados">
+  <ul class="plain">
+    <li><span class="ano-ico">{{ icono("check") }}</span><span><strong>Tu mejor mes: {{ month_name(r.best.year, r.best.month) }}</strong>
+      <small class="muted">Te quedaron {{ r.best.free|eur }} libres</small></span></li>
+    {% if r.n_closed > 1 %}
+    <li><span class="ano-ico">{{ icono("sube") }}</span><span><strong>El que más gastaste: {{ month_name(r.most_spent.year, r.most_spent.month) }}</strong>
+      <small class="muted">{{ r.most_spent.payroll_spent|eur }} en el día a día</small></span></li>
+    {% endif %}
+    {% if r.biggest %}
+    <li><span class="ano-ico">{{ icono("aviso") }}</span><span><strong>Tu gasto más grande: {{ r.biggest.amount|eur }}</strong>
+      <small class="muted">{{ r.biggest.name }} · {{ r.biggest.date|fecha }}</small></span></li>
+    {% endif %}
+    {% if r.top_day %}
+    <li><span class="ano-ico">{{ icono("calendario") }}</span><span><strong>El día que más: {{ r.top_day[0]|dia_largo }}</strong>
+      <small class="muted">{{ r.top_day[1]|eur }} en un solo día</small></span></li>
+    {% endif %}
+    {% if r.most_visited and r.most_visited[2] > 2 %}
+    <li><span class="ano-ico">{{ icono("reloj") }}</span><span><strong>Donde más vas: {{ r.most_visited[0] }}</strong>
+      <small class="muted">{{ r.most_visited[2] }} veces · {{ r.most_visited[1]|eur }}</small></span></li>
+    {% endif %}
+    <li><span class="ano-ico">{{ icono("nota") }}</span><span><strong>{{ r.n_txs }} movimientos</strong>
+      <small class="muted">De media, {{ r.per_day|eur }} los días que gastaste algo</small></span></li>
+  </ul>
+</section>
+
+{% if r.categories %}
+<section class="card tendencias">
+  <h2>En qué se fue</h2>
+  {% for c in r.categories %}
+  <div class="fila-tend">
+    <span>{{ c.name }}</span>
+    <span class="num"><b>{{ c.spent|eur }}</b> <small class="muted">{{ (c.spent / r.spent_all)|pct if r.spent_all }}</small></span>
+    <span class="tend-barras" aria-hidden="true"><span style="width: {{ (c.bar * 100)|round(1) }}%"></span></span>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if r.merchants %}
+<section class="card">
+  <h2>Dónde se fue</h2>
+  <ul class="plain">
+    {% for m in r.merchants %}
+    <li class="previsto-linea"><span class="previsto-que">{{ loop.index }}. {{ m.name }} <small class="muted">{{ m.count }} vez{{ 'es' if m.count != 1 }}</small></span>
+      <span class="num previsto-num">{{ m.spent|eur }}</span></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>Mes a mes</h2>
+  <div class="table-scroll">
+    <table class="data">
+      <thead><tr><th>Mes</th><th>Ingresos</th><th>Gastos</th><th>Aportado</th><th>Libre</th></tr></thead>
+      <tbody>
+        {% for m in r.months %}
+        <tr class="{{ 'current' if m == r.best }}"><th scope="row"><a href="/?mes={{ month_key(m.year, m.month) }}">{{ month_short(m.year, m.month) }}</a></th>
+          <td class="num">{{ m.income|eur }}</td><td class="num">{{ m.payroll_spent|eur }}</td><td class="num">{{ m.saved|eur }}</td>
+          <td class="num {{ 'neg' if m.free < 0 }}">{{ m.free|eur }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="hint">Los meses van de cobro a cobro, como en el resto de la app. El resaltado es tu mejor mes (el que está en curso no compite).</p>
+</section>
+{% endif %}
+{% endblock %}
